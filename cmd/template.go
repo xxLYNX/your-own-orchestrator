@@ -243,16 +243,17 @@ Example:
 
 		// Parse YAML
 		var templateDef struct {
-			Name        string                   `yaml:"name"`
-			Version     string                   `yaml:"version"`
-			Description string                   `yaml:"description"`
-			Category    string                   `yaml:"category"`
-			Inputs      []models.TemplateInput   `yaml:"inputs"`
-			Steps       []models.TemplateStep    `yaml:"steps"`
-			Outputs     []models.TemplateOutput  `yaml:"outputs"`
-			Metadata    models.TemplateMetadata  `yaml:"metadata"`
-			Examples    []models.TemplateExample `yaml:"examples"`
-			Notes       string                   `yaml:"notes"`
+			Name         string                   `yaml:"name"`
+			Version      string                   `yaml:"version"`
+			Description  string                   `yaml:"description"`
+			Category     string                   `yaml:"category"`
+			Inputs       []models.TemplateInput   `yaml:"inputs"`
+			Steps        []models.TemplateStep    `yaml:"steps"`
+			Outputs      []models.TemplateOutput  `yaml:"outputs"`
+			RecordSchema *models.RecordSchema     `yaml:"record_schema"`
+			Metadata     models.TemplateMetadata  `yaml:"metadata"`
+			Examples     []models.TemplateExample `yaml:"examples"`
+			Notes        string                   `yaml:"notes"`
 		}
 
 		if err := yaml.Unmarshal(data, &templateDef); err != nil {
@@ -275,12 +276,13 @@ Example:
 			Category:    templateDef.Category,
 			IsBuiltin:   false,
 			Definition: models.TemplateDefinition{
-				Inputs:   templateDef.Inputs,
-				Steps:    templateDef.Steps,
-				Outputs:  templateDef.Outputs,
-				Metadata: templateDef.Metadata,
-				Examples: templateDef.Examples,
-				Notes:    templateDef.Notes,
+				Inputs:       templateDef.Inputs,
+				Steps:        templateDef.Steps,
+				Outputs:      templateDef.Outputs,
+				RecordSchema: templateDef.RecordSchema,
+				Metadata:     templateDef.Metadata,
+				Examples:     templateDef.Examples,
+				Notes:        templateDef.Notes,
 			},
 		}
 
@@ -472,16 +474,17 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 
 			// Parse template
 			var templateDef struct {
-				Name        string                   `yaml:"name"`
-				Version     string                   `yaml:"version"`
-				Description string                   `yaml:"description"`
-				Category    string                   `yaml:"category"`
-				Inputs      []models.TemplateInput   `yaml:"inputs"`
-				Steps       []models.TemplateStep    `yaml:"steps"`
-				Outputs     []models.TemplateOutput  `yaml:"outputs"`
-				Metadata    models.TemplateMetadata  `yaml:"metadata"`
-				Examples    []models.TemplateExample `yaml:"examples"`
-				Notes       string                   `yaml:"notes"`
+				Name         string                   `yaml:"name"`
+				Version      string                   `yaml:"version"`
+				Description  string                   `yaml:"description"`
+				Category     string                   `yaml:"category"`
+				Inputs       []models.TemplateInput   `yaml:"inputs"`
+				Steps        []models.TemplateStep    `yaml:"steps"`
+				Outputs      []models.TemplateOutput  `yaml:"outputs"`
+				RecordSchema *models.RecordSchema     `yaml:"record_schema"`
+				Metadata     models.TemplateMetadata  `yaml:"metadata"`
+				Examples     []models.TemplateExample `yaml:"examples"`
+				Notes        string                   `yaml:"notes"`
 			}
 
 			if err := yaml.Unmarshal(data, &templateDef); err != nil {
@@ -496,12 +499,13 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				Category:    templateDef.Category,
 				IsBuiltin:   true,
 				Definition: models.TemplateDefinition{
-					Inputs:   templateDef.Inputs,
-					Steps:    templateDef.Steps,
-					Outputs:  templateDef.Outputs,
-					Metadata: templateDef.Metadata,
-					Examples: templateDef.Examples,
-					Notes:    templateDef.Notes,
+					Inputs:       templateDef.Inputs,
+					Steps:        templateDef.Steps,
+					Outputs:      templateDef.Outputs,
+					RecordSchema: templateDef.RecordSchema,
+					Metadata:     templateDef.Metadata,
+					Examples:     templateDef.Examples,
+					Notes:        templateDef.Notes,
 				},
 			}
 

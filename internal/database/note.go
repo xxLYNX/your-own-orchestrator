@@ -7,21 +7,23 @@ import (
 
 // Note represents a task, reminder, or action item in the schedule
 type Note struct {
-	ID          int64     `json:"id"`
-	Title       string    `json:"title"`
-	Description string    `json:"description"`
-	ScheduledAt time.Time `json:"scheduled_at"`
-	Status      string    `json:"status"` // "pending", "completed", "cancelled"
-	Priority    int       `json:"priority"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID               int64     `json:"id"`
+	Title            string    `json:"title"`
+	Description      string    `json:"description"`
+	ScheduledAt      time.Time `json:"scheduled_at"`
+	Status           string    `json:"status"` // "pending", "completed", "cancelled"
+	Priority         int       `json:"priority"`
+	IsTemplated      bool      `json:"is_templated"`
+	TemplateProgress float64   `json:"template_progress"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // CreateNote inserts a new note into the database
 func CreateNote(db *sql.DB, note *Note) error {
 	query := `
-		INSERT INTO notes (title, description, scheduled_at, status, priority, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO notes (title, description, scheduled_at, status, priority, is_templated, template_progress, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
@@ -41,6 +43,8 @@ func CreateNote(db *sql.DB, note *Note) error {
 		note.ScheduledAt,
 		note.Status,
 		note.Priority,
+		note.IsTemplated,
+		note.TemplateProgress,
 		note.CreatedAt,
 		note.UpdatedAt,
 	)
@@ -55,7 +59,7 @@ func CreateNote(db *sql.DB, note *Note) error {
 // GetNoteByID retrieves a note by its ID
 func GetNoteByID(db *sql.DB, id int64) (*Note, error) {
 	query := `
-		SELECT id, title, description, scheduled_at, status, priority, created_at, updated_at
+		SELECT id, title, description, scheduled_at, status, priority, is_templated, template_progress, created_at, updated_at
 		FROM notes
 		WHERE id = ?
 	`
@@ -68,6 +72,8 @@ func GetNoteByID(db *sql.DB, id int64) (*Note, error) {
 		&note.ScheduledAt,
 		&note.Status,
 		&note.Priority,
+		&note.IsTemplated,
+		&note.TemplateProgress,
 		&note.CreatedAt,
 		&note.UpdatedAt,
 	)
@@ -85,7 +91,7 @@ func GetNotesByDate(db *sql.DB, date time.Time) ([]*Note, error) {
 	endOfDay := startOfDay.Add(24 * time.Hour)
 
 	query := `
-		SELECT id, title, description, scheduled_at, status, priority, created_at, updated_at
+		SELECT id, title, description, scheduled_at, status, priority, is_templated, template_progress, created_at, updated_at
 		FROM notes
 		WHERE scheduled_at >= ? AND scheduled_at < ?
 		ORDER BY scheduled_at ASC, priority DESC
@@ -107,6 +113,8 @@ func GetNotesByDate(db *sql.DB, date time.Time) ([]*Note, error) {
 			&note.ScheduledAt,
 			&note.Status,
 			&note.Priority,
+			&note.IsTemplated,
+			&note.TemplateProgress,
 			&note.CreatedAt,
 			&note.UpdatedAt,
 		)
@@ -122,10 +130,10 @@ func GetNotesByDate(db *sql.DB, date time.Time) ([]*Note, error) {
 // GetNotesByDateRange retrieves all notes within a date range
 func GetNotesByDateRange(db *sql.DB, startDate, endDate time.Time) ([]*Note, error) {
 	query := `
-		SELECT id, title, description, scheduled_at, status, priority, created_at, updated_at
+		SELECT id, title, description, scheduled_at, status, priority, is_templated, template_progress, created_at, updated_at
 		FROM notes
 		WHERE scheduled_at >= ? AND scheduled_at < ?
-		ORDER BY scheduled_at ASC, priority DESC
+		ORDER BY scheduled_at ASC
 	`
 
 	rows, err := db.Query(query, startDate, endDate)
@@ -144,6 +152,8 @@ func GetNotesByDateRange(db *sql.DB, startDate, endDate time.Time) ([]*Note, err
 			&note.ScheduledAt,
 			&note.Status,
 			&note.Priority,
+			&note.IsTemplated,
+			&note.TemplateProgress,
 			&note.CreatedAt,
 			&note.UpdatedAt,
 		)
