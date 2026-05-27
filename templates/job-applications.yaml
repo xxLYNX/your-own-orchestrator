@@ -34,6 +34,67 @@ inputs:
     description: "List of target companies (optional)"
     required: false
 
+# Record schema - defines the structure for each job application
+record_schema:
+  fields:
+    - name: "company"
+      type: "text"
+      description: "Company name"
+      required: true
+
+    - name: "position"
+      type: "text"
+      description: "Job title/position"
+      required: true
+
+    - name: "date"
+      type: "date"
+      description: "Date applied"
+      required: true
+
+    - name: "status"
+      type: "enum"
+      description: "Application status"
+      required: true
+      default: "Found"
+      values:
+        - "Found"
+        - "Applied"
+        - "Interview"
+        - "Offer"
+        - "Rejected"
+        - "Withdrawn"
+
+    - name: "url"
+      type: "url"
+      description: "Job posting URL"
+      required: false
+
+    - name: "reference"
+      type: "text"
+      description: "Application reference number"
+      required: false
+
+    - name: "contact_person"
+      type: "text"
+      description: "Contact person or recruiter name"
+      required: false
+
+    - name: "follow_up_date"
+      type: "date"
+      description: "Date to follow up"
+      required: false
+
+    - name: "salary_range"
+      type: "text"
+      description: "Salary range (if known)"
+      required: false
+
+    - name: "notes"
+      type: "text"
+      description: "Additional notes about this application"
+      required: false
+
 # Procedural steps to complete the task
 steps:
   - id: 1

@@ -21,12 +21,28 @@ type Template struct {
 
 // TemplateDefinition is the complete template structure
 type TemplateDefinition struct {
-	Inputs   []TemplateInput   `json:"inputs" yaml:"inputs"`
-	Steps    []TemplateStep    `json:"steps" yaml:"steps"`
-	Outputs  []TemplateOutput  `json:"outputs" yaml:"outputs"`
-	Metadata TemplateMetadata  `json:"metadata" yaml:"metadata"`
-	Examples []TemplateExample `json:"examples,omitempty" yaml:"examples,omitempty"`
-	Notes    string            `json:"notes,omitempty" yaml:"notes,omitempty"`
+	Inputs       []TemplateInput   `json:"inputs" yaml:"inputs"`
+	Steps        []TemplateStep    `json:"steps" yaml:"steps"`
+	Outputs      []TemplateOutput  `json:"outputs" yaml:"outputs"`
+	RecordSchema *RecordSchema     `json:"record_schema,omitempty" yaml:"record_schema,omitempty"`
+	Metadata     TemplateMetadata  `json:"metadata" yaml:"metadata"`
+	Examples     []TemplateExample `json:"examples,omitempty" yaml:"examples,omitempty"`
+	Notes        string            `json:"notes,omitempty" yaml:"notes,omitempty"`
+}
+
+// RecordSchema defines the structure for repeating log-style records
+type RecordSchema struct {
+	Fields []RecordField `json:"fields" yaml:"fields"`
+}
+
+// RecordField defines a single field in a record
+type RecordField struct {
+	Name        string   `json:"name" yaml:"name"`
+	Type        string   `json:"type" yaml:"type"` // text, integer, date, enum, url, boolean
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Required    bool     `json:"required" yaml:"required"`
+	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
+	Values      []string `json:"values,omitempty" yaml:"values,omitempty"` // For enum types
 }
 
 // TemplateInput defines required or optional inputs
@@ -124,10 +140,21 @@ type Reference struct {
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
 
+// TemplateRecord represents a single record in a log-style template
+type TemplateRecord struct {
+	ID             int64                  `json:"id" db:"id"`
+	NoteTemplateID int64                  `json:"note_template_id" db:"note_template_id"`
+	RecordIndex    int                    `json:"record_index" db:"record_index"`
+	Data           map[string]interface{} `json:"data" db:"data"`     // Stored as JSON
+	Status         string                 `json:"status" db:"status"` // draft, in_progress, complete
+	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at" db:"updated_at"`
+}
+
 // Validate checks if the template definition is valid
 func (td *TemplateDefinition) Validate() error {
-	if len(td.Steps) == 0 {
-		return fmt.Errorf("template must have at least one step")
+	if len(td.Steps) == 0 && td.RecordSchema == nil {
+		return fmt.Errorf("template must have at least one step or a record schema")
 	}
 
 	// Validate step IDs are sequential
@@ -175,6 +202,86 @@ func (td *TemplateDefinition) Validate() error {
 	for _, step := range td.Steps {
 		if step.OutputRequired != "" && !outputMap[step.OutputRequired] {
 			return fmt.Errorf("step %d references non-existent output '%s'", step.ID, step.OutputRequired)
+		}
+	}
+
+	return nil
+}
+
+// ValidateRecord checks if a record matches the schema requirements
+func (rs *RecordSchema) ValidateRecord(data map[string]interface{}) error {
+	if rs == nil {
+		return fmt.Errorf("no record schema defined")
+	}
+
+	// Check all required fields are present
+	for _, field := range rs.Fields {
+		if field.Required {
+			if _, exists := data[field.Name]; !exists {
+				return fmt.Errorf("required field '%s' is missing", field.Name)
+			}
+		}
+	}
+
+	// Validate field types
+	validTypes := map[string]bool{
+		"text": true, "integer": true, "date": true, "enum": true,
+		"url": true, "boolean": true,
+	}
+	for _, field := range rs.Fields {
+		if !validTypes[field.Type] {
+			return fmt.Errorf("invalid field type '%s' for field '%s'", field.Type, field.Name)
+		}
+
+		// For enum types, validate values list
+		if field.Type == "enum" && len(field.Values) == 0 {
+			return fmt.Errorf("enum field '%s' must have values defined", field.Name)
+		}
+	}
+
+	// Validate data values against field definitions
+	for name, value := range data {
+		// Find field definition
+		var fieldDef *RecordField
+		for i := range rs.Fields {
+			if rs.Fields[i].Name == name {
+				fieldDef = &rs.Fields[i]
+				break
+			}
+		}
+
+		if fieldDef == nil {
+			return fmt.Errorf("unknown field '%s'", name)
+		}
+
+		// Basic type validation
+		switch fieldDef.Type {
+		case "integer":
+			switch value.(type) {
+			case int, int64, float64:
+				// OK
+			default:
+				return fmt.Errorf("field '%s' must be an integer", name)
+			}
+		case "boolean":
+			if _, ok := value.(bool); !ok {
+				return fmt.Errorf("field '%s' must be a boolean", name)
+			}
+		case "enum":
+			strVal, ok := value.(string)
+			if !ok {
+				return fmt.Errorf("field '%s' must be a string", name)
+			}
+			validValue := false
+			for _, allowed := range fieldDef.Values {
+				if strVal == allowed {
+					validValue = true
+					break
+				}
+			}
+			if !validValue {
+				return fmt.Errorf("field '%s' has invalid value '%s'", name, strVal)
+			}
 		}
 	}
 

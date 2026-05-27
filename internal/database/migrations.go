@@ -148,6 +148,50 @@ DROP TABLE IF EXISTS templates;
 -- but will be unused if this migration is rolled back
 `,
 	},
+	{
+		Version:     2,
+		Name:        "add_template_records",
+		Description: "Add template records (log shape) for repeating structured data",
+		Up: `
+-- Template records table (log-shaped data)
+-- This allows templates to define repeating structured records (like job applications, contacts, etc.)
+CREATE TABLE IF NOT EXISTS template_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_template_id INTEGER NOT NULL,
+    record_index INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (note_template_id) REFERENCES note_templates(id) ON DELETE CASCADE,
+    UNIQUE(note_template_id, record_index)
+);
+
+-- Indexes for efficient queries
+CREATE INDEX IF NOT EXISTS idx_template_records_note_template ON template_records(note_template_id);
+CREATE INDEX IF NOT EXISTS idx_template_records_status ON template_records(status);
+CREATE INDEX IF NOT EXISTS idx_template_records_index ON template_records(note_template_id, record_index);
+
+-- Trigger to update template_records timestamp
+CREATE TRIGGER IF NOT EXISTS update_template_records_timestamp
+AFTER UPDATE ON template_records
+BEGIN
+    UPDATE template_records SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+`,
+		Down: `
+-- Drop trigger
+DROP TRIGGER IF EXISTS update_template_records_timestamp;
+
+-- Drop indexes
+DROP INDEX IF EXISTS idx_template_records_index;
+DROP INDEX IF EXISTS idx_template_records_status;
+DROP INDEX IF EXISTS idx_template_records_note_template;
+
+-- Drop table
+DROP TABLE IF EXISTS template_records;
+`,
+	},
 }
 
 // initMigrationsTable creates the migrations tracking table
