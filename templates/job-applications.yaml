@@ -1,0 +1,148 @@
+# Job Applications Template
+# Track multiple job applications with structured workflow
+
+name: "Job Applications"
+version: "1.0.0"
+description: "Apply to multiple positions with documentation and accountability tracking"
+category: "career"
+
+# Inputs required before starting
+inputs:
+  - name: "target_count"
+    type: "integer"
+    description: "Number of jobs to apply to"
+    required: true
+
+  - name: "resume"
+    type: "file"
+    description: "Path to your resume/CV"
+    required: true
+
+  - name: "cover_letter_template"
+    type: "file"
+    description: "Cover letter template (if needed)"
+    required: false
+
+  - name: "job_boards"
+    type: "text"
+    description: "Comma-separated list of job boards to use"
+    required: false
+    default: "LinkedIn,Indeed,Glassdoor"
+
+  - name: "target_companies"
+    type: "file"
+    description: "List of target companies (optional)"
+    required: false
+
+# Procedural steps to complete the task
+steps:
+  - id: 1
+    title: "Find job opportunities"
+    description: "Search job boards and company sites for relevant positions"
+    checklist:
+      - "Search LinkedIn for relevant roles"
+      - "Check Indeed for positions"
+      - "Browse Glassdoor listings"
+      - "Check company career pages directly"
+      - "Review job requirements and fit"
+    estimated_time: "1-2 hours"
+
+  - id: 2
+    title: "Customize applications"
+    description: "Tailor resume and cover letter for each specific role"
+    checklist:
+      - "Review job description keywords"
+      - "Adjust resume to highlight relevant experience"
+      - "Customize cover letter if required"
+      - "Prepare answers for common application questions"
+    estimated_time: "30-60 minutes per application"
+
+  - id: 3
+    title: "Submit applications"
+    description: "Apply to positions and save confirmation details"
+    checklist:
+      - "Complete online application forms"
+      - "Upload tailored resume and cover letter"
+      - "Save confirmation emails"
+      - "Note application reference numbers"
+    estimated_time: "15-20 minutes per application"
+    output_required: "confirmation_emails"
+
+  - id: 4
+    title: "Document applications"
+    description: "Record all applications in tracking spreadsheet for accountability"
+    checklist:
+      - "Create or open tracking spreadsheet"
+      - "Add each application with: company, role, date, status"
+      - "Include application URLs and reference numbers"
+      - "Add follow-up dates"
+      - "Export final list"
+    estimated_time: "30 minutes"
+    output_required: "applications_list"
+
+# Expected outputs/deliverables
+outputs:
+  - name: "applications_list"
+    type: "file"
+    description: "Comprehensive spreadsheet of all applications submitted"
+    format: "csv|xlsx|google-sheets"
+    required: true
+    fields:
+      - "Company Name"
+      - "Job Title"
+      - "Date Applied"
+      - "Application Status"
+      - "Job URL"
+      - "Application Reference"
+      - "Follow-up Date"
+      - "Contact Person"
+
+  - name: "confirmation_emails"
+    type: "folder"
+    description: "Folder containing application confirmation emails/screenshots"
+    required: true
+
+  - name: "customized_materials"
+    type: "folder"
+    description: "Folder with tailored resumes and cover letters used"
+    required: false
+
+# Template metadata
+metadata:
+  tags:
+    - "job-search"
+    - "career-development"
+    - "applications"
+  estimated_duration: "2-4 hours total"
+  difficulty: "medium"
+
+# Example usage in CLI
+examples:
+  - description: "Create job application note with all inputs"
+    command: |
+      yoo add "Apply to 10 tech jobs" \
+        --template job-applications \
+        --input target_count=10 \
+        --input resume=~/Documents/resume-2024.pdf \
+        --input cover_letter_template=~/Documents/cover-letter-template.docx
+
+  - description: "Create with minimal inputs"
+    command: |
+      yoo add "Job search sprint" \
+        --template job-applications \
+        --input target_count=15 \
+        --input resume=~/resume.pdf
+
+# Notes for users
+notes: |
+  This template helps you stay organized when applying to multiple jobs.
+  The output spreadsheet is especially useful for:
+  - Sharing progress with accountability partners
+  - Tracking follow-ups and interview invitations
+  - Analyzing your job search effectiveness
+
+  Tips:
+  - Set target_count to a realistic number (5-15 is good for a focused search)
+  - Save confirmation emails immediately after applying
+  - Update the spreadsheet daily to avoid forgetting applications
+  - Include application reference numbers for easy follow-up

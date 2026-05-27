@@ -1,0 +1,181 @@
+# Research Task Template
+# Structured approach to conducting research with documentation
+
+name: "Research Task"
+version: "1.0.0"
+description: "Conduct comprehensive research on a topic with sources, analysis, and deliverables"
+category: "academic"
+
+# Inputs required before starting
+inputs:
+  - name: "topic"
+    type: "text"
+    description: "Research topic or question"
+    required: true
+
+  - name: "deadline"
+    type: "date"
+    description: "Research completion deadline"
+    required: true
+
+  - name: "depth_level"
+    type: "text"
+    description: "Depth of research required"
+    required: true
+    options:
+      - "surface" # Quick overview
+      - "moderate" # Standard research
+      - "comprehensive" # Deep dive
+      - "exhaustive" # Academic level
+
+  - name: "purpose"
+    type: "text"
+    description: "Purpose of research (decision-making, learning, presentation, etc.)"
+    required: false
+
+  - name: "initial_sources"
+    type: "file"
+    description: "List of initial sources or reading list"
+    required: false
+
+  - name: "audience"
+    type: "text"
+    description: "Who will consume this research?"
+    required: false
+
+# Procedural steps
+steps:
+  - id: 1
+    title: "Literature review"
+    description: "Identify and review existing knowledge on the topic"
+    checklist:
+      - "Define research scope and key questions"
+      - "Search academic databases and journals"
+      - "Review books and authoritative sources"
+      - "Scan blog posts and industry articles"
+      - "Identify key thought leaders and experts"
+      - "Note gaps in existing knowledge"
+    estimated_time: "2-4 hours"
+
+  - id: 2
+    title: "Data collection"
+    description: "Gather primary and secondary data"
+    checklist:
+      - "Collect relevant statistics and data"
+      - "Conduct interviews if needed"
+      - "Survey or poll if appropriate"
+      - "Download papers and documents"
+      - "Bookmark and archive web sources"
+      - "Organize sources by theme"
+    estimated_time: "1-3 hours"
+    output_required: "sources_bibliography"
+
+  - id: 3
+    title: "Analysis and synthesis"
+    description: "Analyze findings and identify patterns"
+    checklist:
+      - "Review all collected information"
+      - "Identify common themes and patterns"
+      - "Note contradictions or disagreements"
+      - "Evaluate source credibility"
+      - "Draw preliminary conclusions"
+      - "Identify areas needing more research"
+    estimated_time: "2-4 hours"
+    output_required: "research_notes"
+
+  - id: 4
+    title: "Document findings"
+    description: "Write up research summary and conclusions"
+    checklist:
+      - "Create document outline"
+      - "Write executive summary"
+      - "Document key findings"
+      - "Include supporting evidence"
+      - "Add visualizations if helpful"
+      - "Write recommendations if applicable"
+      - "Proofread and edit"
+    estimated_time: "1-3 hours"
+    output_required: "summary_document"
+
+# Expected outputs
+outputs:
+  - name: "research_notes"
+    type: "file"
+    description: "Detailed research notes with annotations"
+    format: "markdown|notion|obsidian|txt"
+    required: true
+
+  - name: "sources_bibliography"
+    type: "file"
+    description: "Annotated bibliography of all sources"
+    format: "markdown|bibtex|csv"
+    required: true
+
+  - name: "summary_document"
+    type: "file"
+    description: "Final research summary with findings and conclusions"
+    format: "markdown|pdf|docx"
+    required: true
+
+  - name: "data_files"
+    type: "folder"
+    description: "Collected data files, PDFs, and supporting materials"
+    required: false
+
+  - name: "presentation"
+    type: "file"
+    description: "Presentation slides if research will be presented"
+    format: "pptx|google-slides|keynote"
+    required: false
+
+# Template metadata
+metadata:
+  tags:
+    - "research"
+    - "analysis"
+    - "learning"
+    - "documentation"
+  estimated_duration: "6-14 hours depending on depth"
+  difficulty: "medium-high"
+
+# Example usage
+examples:
+  - description: "Research GraphQL vs REST APIs"
+    command: |
+      yoo add "GraphQL vs REST comparison" \
+        --template research-task \
+        --input topic="GraphQL vs REST APIs" \
+        --input depth_level="comprehensive" \
+        --input deadline="2024-06-15" \
+        --input purpose="architecture decision"
+
+  - description: "Quick market research"
+    command: |
+      yoo add "Research CRM solutions" \
+        --template research-task \
+        --input topic="CRM software options for small business" \
+        --input depth_level="moderate" \
+        --input deadline="2024-06-01"
+
+# Notes for users
+notes: |
+  This template helps structure research projects and ensures thorough coverage.
+
+  Tips for effective research:
+  - Start broad, then narrow down to specific questions
+  - Use multiple source types (academic, industry, practitioner)
+  - Take notes as you go - don't rely on memory
+  - Track sources immediately to avoid citation headaches later
+  - Set time limits for each phase to avoid analysis paralysis
+
+  Depth level guidance:
+  - Surface (1-2 hours): Quick overview, basic understanding
+  - Moderate (4-8 hours): Standard research, sufficient for decisions
+  - Comprehensive (8-20 hours): Deep understanding, multiple perspectives
+  - Exhaustive (20+ hours): Academic/professional level, publication-ready
+
+  The bibliography output is crucial for:
+  - Citation and attribution
+  - Revisiting sources later
+  - Sharing sources with team members
+  - Demonstrating research thoroughness

@@ -1,0 +1,209 @@
+# Project Milestone Template
+# Track and complete project milestones with structured deliverables
+
+name: "Project Milestone"
+version: "1.0.0"
+description: "Complete a project milestone with planning, implementation, testing, and documentation"
+category: "project-management"
+
+# Inputs required before starting
+inputs:
+  - name: "milestone_name"
+    type: "text"
+    description: "Name of the milestone (e.g., 'MVP Release', 'Beta Launch')"
+    required: true
+
+  - name: "project_spec"
+    type: "file"
+    description: "Project specification or requirements document"
+    required: true
+
+  - name: "deadline"
+    type: "date"
+    description: "Milestone deadline"
+    required: true
+
+  - name: "resources"
+    type: "text"
+    description: "Available resources (team members, tools, budget)"
+    required: false
+
+  - name: "stakeholders"
+    type: "text"
+    description: "Key stakeholders who need updates"
+    required: false
+
+  - name: "success_criteria"
+    type: "text"
+    description: "What defines success for this milestone"
+    required: true
+
+# Procedural steps to complete the milestone
+steps:
+  - id: 1
+    title: "Planning and breakdown"
+    description: "Create detailed plan and break down work into tasks"
+    checklist:
+      - "Review project specification thoroughly"
+      - "Identify all required deliverables"
+      - "Break down work into actionable tasks"
+      - "Estimate time and resources for each task"
+      - "Identify dependencies and blockers"
+      - "Create timeline with buffer for issues"
+      - "Set up tracking system (board, spreadsheet, etc.)"
+    estimated_time: "2-4 hours"
+
+  - id: 2
+    title: "Implementation"
+    description: "Execute the planned work to build the milestone deliverables"
+    checklist:
+      - "Set up development environment"
+      - "Implement core functionality"
+      - "Handle edge cases"
+      - "Integrate with existing systems"
+      - "Conduct code reviews (if applicable)"
+      - "Address feedback and iterate"
+    estimated_time: "varies by project scope"
+    output_required: "deliverable"
+
+  - id: 3
+    title: "Testing and quality assurance"
+    description: "Verify that deliverables meet requirements and quality standards"
+    checklist:
+      - "Create test plan based on success criteria"
+      - "Execute unit tests"
+      - "Perform integration testing"
+      - "Conduct user acceptance testing"
+      - "Document test results"
+      - "Fix critical bugs"
+      - "Verify all success criteria are met"
+    estimated_time: "1-3 days"
+    output_required: "test_results"
+
+  - id: 4
+    title: "Documentation"
+    description: "Create comprehensive documentation for the milestone"
+    checklist:
+      - "Write technical documentation"
+      - "Create user guides or README"
+      - "Document known issues and limitations"
+      - "Update project wiki or docs site"
+      - "Record design decisions (ADRs if applicable)"
+      - "Prepare demo materials"
+    estimated_time: "4-8 hours"
+    output_required: "documentation"
+
+  - id: 5
+    title: "Review and handoff"
+    description: "Present milestone to stakeholders and prepare for next phase"
+    checklist:
+      - "Schedule review meeting with stakeholders"
+      - "Prepare presentation or demo"
+      - "Present completed work"
+      - "Gather feedback"
+      - "Create status report"
+      - "Document lessons learned"
+      - "Plan next steps"
+    estimated_time: "2-4 hours"
+    output_required: "status_report"
+
+# Expected outputs/deliverables
+outputs:
+  - name: "deliverable"
+    type: "file|folder|url"
+    description: "The main milestone deliverable (code, design, document, etc.)"
+    required: true
+
+  - name: "test_results"
+    type: "file"
+    description: "Test results and quality assurance report"
+    format: "pdf|markdown|html"
+    required: true
+
+  - name: "documentation"
+    type: "file|folder"
+    description: "Technical and user documentation"
+    format: "markdown|html|pdf"
+    required: true
+
+  - name: "status_report"
+    type: "file"
+    description: "Milestone completion report for stakeholders"
+    format: "pdf|markdown|google-docs"
+    required: true
+    fields:
+      - "Milestone summary"
+      - "Completed deliverables"
+      - "Test results summary"
+      - "Known issues"
+      - "Lessons learned"
+      - "Next steps"
+
+  - name: "demo_materials"
+    type: "file|folder"
+    description: "Presentation slides or demo recording"
+    required: false
+
+# Template metadata
+metadata:
+  tags:
+    - "project-management"
+    - "milestone"
+    - "deliverable"
+    - "software-development"
+  estimated_duration: "1-4 weeks (varies by scope)"
+  difficulty: "medium-high"
+
+# Example usage in CLI
+examples:
+  - description: "Create milestone note with full details"
+    command: |
+      yoo add "Complete MVP Release" \
+        --template project-milestone \
+        --input milestone_name="MVP Release v1.0" \
+        --input project_spec=~/Projects/myapp/specs/mvp.md \
+        --input deadline=2024-07-15 \
+        --input success_criteria="Core features working, <5 critical bugs"
+
+  - description: "Create with minimal inputs"
+    command: |
+      yoo add "Beta Launch" \
+        --template project-milestone \
+        --input milestone_name="Beta Launch" \
+        --input project_spec=~/specs.md \
+        --input deadline=2024-08-01
+
+  - description: "Track progress"
+    command: |
+      # Complete steps as you progress
+      yoo step complete 45 1  # Planning done
+      yoo step complete 45 2  # Implementation done
+
+      # Add deliverables
+      yoo artifact add 45 --type output \
+        --name deliverable \
+        --folder ~/Projects/myapp/dist
+
+# Notes for users
+notes: |
+  This template helps you systematically complete project milestones with
+  proper planning, execution, and documentation.
+
+  Key benefits:
+  - Ensures no steps are skipped
+  - Creates accountability with documented outputs
+  - Provides clear communication materials for stakeholders
+  - Captures lessons learned for future projects
+
+  Tips:
+  - Break large milestones into smaller sub-milestones
+  - Update the status report weekly during implementation
+  - Keep stakeholders informed at each major step completion
+  - Document blockers and decisions as you go
+  - Review success criteria before starting testing phase
+  - Schedule the review meeting early to ensure stakeholder availability
+
+  Adapt this template to your workflow:
+  - Add or remove steps based on your methodology
+  - Adjust checklists for your specific domain
+  - Customize output formats to match team standards

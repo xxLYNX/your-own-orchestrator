@@ -13,6 +13,7 @@ A terminal-based task and schedule management tool that helps you keep track of 
 - 🔍 **Smart Queries**: Query specific dates or default to today
 - 💾 **Local Storage**: All data stored locally in SQLite
 - ⚡ **Fast & Lightweight**: No external dependencies or cloud services
+- 🎯 **Templates** *(Coming Soon)*: Structure complex tasks with inputs, steps, and outputs
 
 ## Installation
 
@@ -96,8 +97,26 @@ yoo add "Team meeting" --date 2024-01-20
 #### Add a note with priority and tags
 ```bash
 yoo add "Review PR" --priority high --tags work,urgent
-yoo add "Doctor appointment" -p high -t health,personal
 ```
+
+#### Using Templates (Coming in v0.2.0+)
+
+Templates help structure complex tasks with procedural steps:
+
+```bash
+# Apply to multiple jobs with structured workflow
+yoo add "Apply to 10 jobs" --template job-applications \
+  --input target_count=10 \
+  --input resume=~/Documents/resume.pdf
+
+# See available templates
+yoo templates list
+
+# View template details
+yoo templates show job-applications
+```
+
+See `templates/README.md` and `docs/TEMPLATES_DESIGN.md` for details.
 
 ### TUI Keyboard Shortcuts
 
@@ -204,6 +223,24 @@ your-own-orchestrator/
 ├── Makefile              # Build automation
 └── config.example.yaml   # Example configuration
 ```
+
+## Roadmap
+
+### v0.2.0 - Template System (In Design)
+- [ ] Note templates with inputs, steps, and outputs
+- [ ] Built-in templates (job applications, research, projects)
+- [ ] Template management CLI commands
+- [ ] Step tracking and completion
+- [ ] Artifact management (inputs/outputs)
+
+See `docs/TEMPLATES_DESIGN.md` for detailed design.
+
+### Future Releases
+- Recurring notes/tasks
+- Week/month calendar view
+- Search and filtering
+- Export/import functionality
+- Reminders and notifications
 
 ## Contributing
 
