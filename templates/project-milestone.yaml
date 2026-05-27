@@ -110,7 +110,7 @@ steps:
 # Expected outputs/deliverables
 outputs:
   - name: "deliverable"
-    type: "file|folder|url"
+    type: "folder"
     description: "The main milestone deliverable (code, design, document, etc.)"
     required: true
 
@@ -121,7 +121,7 @@ outputs:
     required: true
 
   - name: "documentation"
-    type: "file|folder"
+    type: "folder"
     description: "Technical and user documentation"
     format: "markdown|html|pdf"
     required: true
@@ -140,7 +140,7 @@ outputs:
       - "Next steps"
 
   - name: "demo_materials"
-    type: "file|folder"
+    type: "folder"
     description: "Presentation slides or demo recording"
     required: false
 
