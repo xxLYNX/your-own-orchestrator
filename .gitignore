@@ -1,0 +1,54 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+yoo
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# OS files
+Thumbs.db
+Desktop.ini
+
+# SQLite database files
+*.db
+*.db-shm
+*.db-wal
+
+# Config files (user-specific)
+config.yaml
+.yoo.yaml
+
+# Build directory
+dist/
+build/
+
+# Test cache
+.cache/
+
+# Log files
+*.log
+
+# Temporary files
+tmp/
+temp/

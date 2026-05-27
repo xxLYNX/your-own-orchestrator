@@ -1,0 +1,41 @@
+# yoo Configuration File
+# Copy this file to ~/.config/yoo/config.yaml (Linux/macOS) or %APPDATA%\yoo\config.yaml (Windows)
+
+# Database configuration
+database:
+  # Path to the SQLite database file
+  # Default: ~/.local/share/yoo/yoo.db (Linux/macOS) or %APPDATA%\yoo\yoo.db (Windows)
+  path: "~/.local/share/yoo/yoo.db"
+
+# Date and time formatting
+format:
+  # Date format using Go's time layout
+  # Default: "2006-01-02" (ISO 8601)
+  # Examples:
+  #   "2006-01-02" -> 2024-01-15
+  #   "01/02/2006" -> 01/15/2024
+  #   "Jan 2, 2006" -> Jan 15, 2024
+  date: "2006-01-02"
+
+  # Time format using Go's time layout
+  # Default: "15:04" (24-hour format)
+  # Examples:
+  #   "15:04" -> 14:30
+  #   "3:04 PM" -> 2:30 PM
+  time: "15:04"
+
+# TUI (Terminal User Interface) settings
+tui:
+  # Color theme (future feature)
+  # theme: "default"
+
+  # Show completed notes (future feature)
+  # show_completed: true
+
+# Default view settings
+defaults:
+  # Default priority for new notes (future feature)
+  # priority: "medium"
+
+  # Show notes from how many days ago (future feature)
+  # history_days: 7
