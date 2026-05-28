@@ -108,7 +108,7 @@ func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, stack models.Repeat
 	if err != nil {
 		return nil, fmt.Errorf("failed to list template records: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var records []*models.TemplateRecord
 	for rows.Next() {
@@ -260,9 +260,4 @@ func DeleteTemplateRecord(conn *sql.DB, noteTemplateID int64, stack models.Repea
 	}
 
 	return nil
-}
-
-// GetNote retrieves a note by its ID
-func GetNote(conn *sql.DB, noteID int64) (*Note, error) {
-	return GetNoteByID(conn, noteID)
 }

@@ -22,9 +22,9 @@ type ShapeNode struct {
 	ChildList []ShapeNode `json:"children,omitempty" yaml:"children,omitempty"`
 
 	// Execution modifiers.
-	Repeat          *RepeatSpec      `json:"repeat,omitempty" yaml:"repeat,omitempty"`
-	DependsOn       []DependencySpec `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
-	DependencyMode  ProcedureMode    `json:"dependency_mode,omitempty" yaml:"dependency_mode,omitempty"`
+	Repeat         *RepeatSpec      `json:"repeat,omitempty" yaml:"repeat,omitempty"`
+	DependsOn      []DependencySpec `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
+	DependencyMode ProcedureMode    `json:"dependency_mode,omitempty" yaml:"dependency_mode,omitempty"`
 
 	// Log shape: structured repeating rows.
 	RecordSchema *RecordSchema `json:"record_schema,omitempty" yaml:"record_schema,omitempty"`

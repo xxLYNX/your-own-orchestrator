@@ -27,13 +27,13 @@ func New(dbPath string) (*DB, error) {
 	}
 
 	if err := conn.Ping(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	db := &DB{conn: conn}
 	if err := db.initSchema(); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, fmt.Errorf("failed to initialize schema: %w", err)
 	}
 

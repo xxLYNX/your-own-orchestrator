@@ -27,7 +27,7 @@ type StepsViewModel struct {
 	height         int
 	embedded       bool
 	scopePath      []string
-	repeatStack   models.RepeatStack
+	repeatStack    models.RepeatStack
 	scopeNode      *models.ShapeNode
 	checklistNode  *models.ShapeNode
 	shapeState     *models.ShapeState

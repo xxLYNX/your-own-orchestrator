@@ -8,9 +8,9 @@ import (
 
 func TestNormalizeRepeatModifier(t *testing.T) {
 	root := &models.ShapeNode{
-		ID:   "applications",
-		Kind: models.ShapeProcedure,
-		Title: "Applications",
+		ID:     "applications",
+		Kind:   models.ShapeProcedure,
+		Title:  "Applications",
 		Repeat: &models.RepeatSpec{Count: "5"},
 		Steps: []models.ShapeNode{
 			{
@@ -39,16 +39,16 @@ func TestNormalizeRepeatModifier(t *testing.T) {
 
 func TestNestedRepeatStateInits(t *testing.T) {
 	root := &models.ShapeNode{
-		ID:   "root",
-		Kind: models.ShapeChecklist,
-		Title: "Parent",
+		ID:     "root",
+		Kind:   models.ShapeChecklist,
+		Title:  "Parent",
 		Repeat: &models.RepeatSpec{Count: "5"},
 		Items: []models.ShapeNode{
 			{ID: "item-1", Kind: models.ShapeAction, Title: "Item 1"},
 			{
-				ID:    "child-list",
-				Kind:  models.ShapeChecklist,
-				Title: "Child checklist",
+				ID:     "child-list",
+				Kind:   models.ShapeChecklist,
+				Title:  "Child checklist",
 				Repeat: &models.RepeatSpec{Count: "4"},
 				Items: []models.ShapeNode{
 					{ID: "child-a", Kind: models.ShapeAction, Title: "Child A"},

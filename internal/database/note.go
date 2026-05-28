@@ -101,7 +101,7 @@ func GetNotesByDate(db *sql.DB, date time.Time) ([]*Note, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var notes []*Note
 	for rows.Next() {

@@ -141,7 +141,7 @@ func ListTemplates(db *sql.DB, category string) ([]*models.Template, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var templates []*models.Template
 	for rows.Next() {

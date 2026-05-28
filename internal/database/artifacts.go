@@ -21,7 +21,7 @@ func ListArtifacts(conn *sql.DB, noteTemplateID int64) ([]*models.Artifact, erro
 	if err != nil {
 		return nil, fmt.Errorf("failed to query artifacts: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	artifacts := []*models.Artifact{}
 	for rows.Next() {

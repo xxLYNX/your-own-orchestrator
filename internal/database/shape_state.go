@@ -11,6 +11,10 @@ import (
 	"yoo/internal/models"
 )
 
+const shapeStateSelectColumns = `
+	id, note_template_id, shape_path, repeat_stack_json, kind, title, status,
+	completed, completed_at, notes, data, created_at, updated_at`
+
 // EnsureShapeStates initializes shape state rows when missing.
 func EnsureShapeStates(db *sql.DB, noteTemplateID int64, template *models.Template, inputs map[string]interface{}) error {
 	var count int
@@ -111,8 +115,7 @@ func upsertShapeState(db *sql.DB, noteTemplateID int64, shapePath string, stack 
 // GetShapeState loads a single shape state row.
 func GetShapeState(db *sql.DB, noteTemplateID int64, shapePath string, stack models.RepeatStack) (*models.ShapeState, error) {
 	query := `
-		SELECT id, note_template_id, shape_path, repeat_stack_json, kind, title, status,
-		       completed, completed_at, notes, data, created_at, updated_at
+		SELECT` + shapeStateSelectColumns + `
 		FROM note_shape_state
 		WHERE note_template_id = ? AND shape_path = ? AND repeat_stack_json = ?
 	`
@@ -182,8 +185,7 @@ func ListShapeStates(db *sql.DB, noteTemplateID int64, stack models.RepeatStack)
 	)
 	if stack == nil {
 		query = `
-			SELECT id, note_template_id, shape_path, repeat_stack_json, kind, title, status,
-			       completed, completed_at, notes, data, created_at, updated_at
+			SELECT` + shapeStateSelectColumns + `
 			FROM note_shape_state
 			WHERE note_template_id = ?
 			ORDER BY repeat_stack_json ASC, shape_path ASC
@@ -191,8 +193,7 @@ func ListShapeStates(db *sql.DB, noteTemplateID int64, stack models.RepeatStack)
 		args = []interface{}{noteTemplateID}
 	} else {
 		query = `
-			SELECT id, note_template_id, shape_path, repeat_stack_json, kind, title, status,
-			       completed, completed_at, notes, data, created_at, updated_at
+			SELECT` + shapeStateSelectColumns + `
 			FROM note_shape_state
 			WHERE note_template_id = ? AND repeat_stack_json = ?
 			ORDER BY shape_path ASC
@@ -204,7 +205,7 @@ func ListShapeStates(db *sql.DB, noteTemplateID int64, stack models.RepeatStack)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list shape states: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	return scanShapeStates(rows)
 }
@@ -217,8 +218,7 @@ func ListAllShapeStates(db *sql.DB, noteTemplateID int64) ([]*models.ShapeState,
 // ListTopLevelProcedureStates returns top-level procedure rows for the steps panel.
 func ListTopLevelProcedureStates(db *sql.DB, noteTemplateID int64) ([]*models.ShapeState, error) {
 	query := `
-		SELECT id, note_template_id, shape_path, repeat_stack_json, kind, title, status,
-		       completed, completed_at, notes, data, created_at, updated_at
+		SELECT` + shapeStateSelectColumns + `
 		FROM note_shape_state
 		WHERE note_template_id = ? AND repeat_stack_json = '[]' AND kind = ?
 		  AND shape_path NOT LIKE '%.apply_one.%' AND shape_path NOT LIKE '%.apply_one'
@@ -228,7 +228,7 @@ func ListTopLevelProcedureStates(db *sql.DB, noteTemplateID int64) ([]*models.Sh
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	return scanShapeStates(rows)
 }
 

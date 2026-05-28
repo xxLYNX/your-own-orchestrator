@@ -9,15 +9,15 @@ import (
 
 func TestEvaluateNestedRepeatProgress(t *testing.T) {
 	root := models.NormalizeShapeTree(&models.ShapeNode{
-		ID:   "root",
-		Kind: models.ShapeChecklist,
-		Title: "Parent",
+		ID:     "root",
+		Kind:   models.ShapeChecklist,
+		Title:  "Parent",
 		Repeat: &models.RepeatSpec{Count: "2"},
 		Items: []models.ShapeNode{
 			{
-				ID:    "child-list",
-				Kind:  models.ShapeChecklist,
-				Title: "Child checklist",
+				ID:     "child-list",
+				Kind:   models.ShapeChecklist,
+				Title:  "Child checklist",
 				Repeat: &models.RepeatSpec{Count: "2"},
 				Items: []models.ShapeNode{
 					{ID: "child-a", Kind: models.ShapeAction, Title: "Child A"},
@@ -78,8 +78,8 @@ func TestDependencyBlocksUntilComplete(t *testing.T) {
 		Steps: []models.ShapeNode{
 			{ID: "a", Kind: models.ShapeAction, Title: "A"},
 			{
-				ID:   "b",
-				Kind: models.ShapeAction,
+				ID:    "b",
+				Kind:  models.ShapeAction,
 				Title: "B",
 				DependsOn: []models.DependencySpec{{
 					Target:      models.TargetRef{ShapeID: "a"},

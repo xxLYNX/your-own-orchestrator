@@ -36,36 +36,26 @@ type OrchestratorModel struct {
 
 // NewOrchestratorModel creates a tree navigator for a templated note.
 func NewOrchestratorModel(db *sql.DB, noteID int64) (*OrchestratorModel, error) {
-	note, err := database.GetNoteByID(db, noteID)
+	ctx, err := database.LoadTemplatedNoteContext(db, noteID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load note: %w", err)
+		return nil, err
 	}
-	if !note.IsTemplated {
+	if !ctx.Note.IsTemplated {
 		return nil, fmt.Errorf("note is not templated")
 	}
 
-	noteTemplate, err := database.GetNoteTemplate(db, noteID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load note template: %w", err)
-	}
-
-	template, err := database.GetTemplateByID(db, noteTemplate.TemplateID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load template: %w", err)
-	}
-
-	comp, err := template.Definition.GetStructure()
+	comp, err := ctx.Template.Definition.GetStructure()
 	if err != nil {
 		return nil, err
 	}
 
 	m := &OrchestratorModel{
 		noteID:       noteID,
-		note:         note,
-		noteTemplate: noteTemplate,
-		template:     template,
+		note:         ctx.Note,
+		noteTemplate: ctx.NoteTemplate,
+		template:     ctx.Template,
 		structure:    comp,
-		inputs:       noteTemplate.TemplateData.Inputs,
+		inputs:       ctx.NoteTemplate.TemplateData.Inputs,
 		navStack:     []models.NavContext{{Path: []string{comp.ID}}},
 		db:           db,
 		width:        80,

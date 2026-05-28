@@ -4,13 +4,12 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	"yoo/internal/database"
 	"yoo/internal/models"
+	"yoo/internal/platform"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -320,15 +319,7 @@ func (m ArtifactsViewModel) renderListView() string {
 	}
 
 	// Group artifacts by type
-	inputs := []*models.Artifact{}
-	outputs := []*models.Artifact{}
-	for _, artifact := range m.artifacts {
-		if artifact.ArtifactType == "input" {
-			inputs = append(inputs, artifact)
-		} else {
-			outputs = append(outputs, artifact)
-		}
-	}
+	inputs, outputs := models.GroupArtifacts(m.artifacts)
 
 	// Render inputs
 	s.WriteString(SectionHeaderStyle.Render("INPUTS:"))
@@ -372,7 +363,6 @@ func (m ArtifactsViewModel) renderListView() string {
 	if m.err != nil {
 		s.WriteString(ErrorMessageStyle.Render(fmt.Sprintf("Error: %s", m.err)))
 		s.WriteString("\n\n")
-		m.err = nil // Clear error after displaying
 	} else if m.successMsg != "" {
 		s.WriteString(SuccessMessageStyle.Render(m.successMsg))
 		s.WriteString("\n\n")
@@ -548,7 +538,7 @@ func (m ArtifactsViewModel) renderDetailsView() string {
 		s.WriteString("\n")
 
 		if artifact.Value != "" {
-			expandedPath := expandPath(artifact.Value)
+			expandedPath := platform.ExpandPath(artifact.Value)
 			fileInfo := m.getFileInfo(expandedPath)
 			s.WriteString(fileInfo)
 		} else {
@@ -678,11 +668,11 @@ func (m ArtifactsViewModel) getFileInfo(path string) string {
 	if info.IsDir() {
 		s.WriteString("  Type: Directory")
 	} else {
-		s.WriteString(fmt.Sprintf("  Type: File | Size: %s", formatFileSize(info.Size())))
+		fmt.Fprintf(&s, "  Type: File | Size: %s", formatFileSize(info.Size()))
 	}
 	s.WriteString("\n")
 
-	s.WriteString(fmt.Sprintf("  Modified: %s", info.ModTime().Format("2006-01-02 15:04:05")))
+	fmt.Fprintf(&s, "  Modified: %s", info.ModTime().Format("2006-01-02 15:04:05"))
 
 	return s.String()
 }
@@ -693,39 +683,15 @@ func (m ArtifactsViewModel) openArtifact(artifact *models.Artifact) error {
 		return fmt.Errorf("no value specified for artifact '%s'", artifact.Name)
 	}
 
-	var cmd *exec.Cmd
 	value := artifact.Value
-
-	// Handle file/folder types
 	if artifact.Type == "file" || artifact.Type == "folder" {
-		value = expandPath(value)
-
-		// Check if file exists
+		value = platform.ExpandPath(value)
 		if _, err := os.Stat(value); err != nil {
 			return fmt.Errorf("file does not exist: %s", value)
 		}
 	}
 
-	// Open based on OS
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", value)
-	case "windows":
-		cmd = exec.Command("cmd", "/c", "start", value)
-	default: // linux, freebsd, etc.
-		// Try multiple options
-		for _, opener := range []string{"xdg-open", "gio", "gnome-open", "kde-open"} {
-			if _, err := exec.LookPath(opener); err == nil {
-				cmd = exec.Command(opener, value)
-				break
-			}
-		}
-		if cmd == nil {
-			return fmt.Errorf("no suitable opener found for your system")
-		}
-	}
-
-	return cmd.Start()
+	return platform.OpenWithDefaultApp(value)
 }
 
 // resetForm resets the form fields
@@ -783,16 +749,6 @@ func (m *ArtifactsViewModel) deleteChar() {
 }
 
 // Utility functions
-
-// expandPath expands ~ and environment variables in a path
-func expandPath(path string) string {
-	if strings.HasPrefix(path, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			path = filepath.Join(home, path[2:])
-		}
-	}
-	return os.ExpandEnv(path)
-}
 
 // formatFileSize formats a file size in bytes to a human-readable string
 func formatFileSize(bytes int64) string {

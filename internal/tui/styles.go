@@ -3,6 +3,8 @@ package tui
 import (
 	"strings"
 
+	"yoo/internal/strutil"
+
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -197,10 +199,10 @@ var (
 var (
 	// PanelStyle is for larger panels with content
 	PanelStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(ColorPrimary).
-			Padding(1, 2).
-			Margin(0, 0, 1, 0)
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(ColorPrimary).
+		Padding(1, 2).
+		Margin(0, 0, 1, 0)
 )
 
 // ==================== List Styles ====================
@@ -395,13 +397,7 @@ func WarningIcon() string {
 
 // Truncate truncates a string to a maximum length with ellipsis
 func Truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen <= 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
+	return strutil.Truncate(s, maxLen)
 }
 
 // PadRight pads a string to a specific width with spaces

@@ -16,12 +16,12 @@ const (
 type DependencyRequirement string
 
 const (
-	RequirementCompleted  DependencyRequirement = "completed"
-	RequirementStarted    DependencyRequirement = "started"
-	RequirementHasRecord  DependencyRequirement = "has_record"
+	RequirementCompleted   DependencyRequirement = "completed"
+	RequirementStarted     DependencyRequirement = "started"
+	RequirementHasRecord   DependencyRequirement = "has_record"
 	RequirementHasArtifact DependencyRequirement = "has_artifact"
-	RequirementApproved   DependencyRequirement = "approved"
-	RequirementNotFailed  DependencyRequirement = "not_failed"
+	RequirementApproved    DependencyRequirement = "approved"
+	RequirementNotFailed   DependencyRequirement = "not_failed"
 )
 
 // DependencyScope disambiguates dependency matching under repeats.

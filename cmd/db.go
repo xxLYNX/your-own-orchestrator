@@ -14,6 +14,6 @@ func withDB(fn func(db *database.DB) error) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	return fn(db)
 }

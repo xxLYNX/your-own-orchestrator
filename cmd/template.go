@@ -9,6 +9,7 @@ import (
 
 	"yoo/internal/database"
 	"yoo/internal/models"
+	"yoo/internal/strutil"
 
 	"github.com/spf13/cobra"
 )
@@ -54,29 +55,19 @@ Optionally filter by category using the --category flag.`,
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-			fmt.Fprintln(w, "NAME\tVERSION\tCATEGORY\tDESCRIPTION\tTYPE")
-			fmt.Fprintln(w, "----\t-------\t--------\t-----------\t----")
+			_, _ = fmt.Fprintln(w, "NAME\tVERSION\tCATEGORY\tDESCRIPTION\tTYPE")
+			_, _ = fmt.Fprintln(w, "----\t-------\t--------\t-----------\t----")
 
 			for _, tpl := range templates {
-				tplType := "custom"
-				if tpl.IsBuiltin {
-					tplType = "builtin"
-				}
-
-				desc := tpl.Description
-				if len(desc) > 50 {
-					desc = desc[:47] + "..."
-				}
-
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 					tpl.Name,
 					tpl.Version,
 					tpl.Category,
-					desc,
-					tplType,
+					strutil.Truncate(tpl.Description, 50),
+					tpl.TypeLabel(),
 				)
 			}
-			w.Flush()
+			_ = w.Flush()
 
 			fmt.Printf("\nTotal: %d template(s)\n", len(templates))
 			fmt.Println("\nUse 'yoo template show <name>' to see template details")
@@ -98,94 +89,60 @@ var templatesShowCmd = &cobra.Command{
 			if err != nil {
 				return fmt.Errorf("template '%s' not found: %w", templateName, err)
 			}
-		fmt.Printf("Template: %s\n", template.Name)
-		fmt.Printf("Version: %s\n", template.Version)
-		fmt.Printf("Category: %s\n", template.Category)
-		fmt.Printf("Description: %s\n", template.Description)
-		if template.IsBuiltin {
-			fmt.Println("Type: Built-in")
-		} else {
-			fmt.Println("Type: Custom")
-		}
-		fmt.Println()
+			fmt.Printf("Template: %s\n", template.Name)
+			fmt.Printf("Version: %s\n", template.Version)
+			fmt.Printf("Category: %s\n", template.Category)
+			fmt.Printf("Description: %s\n", template.Description)
+			fmt.Printf("Type: %s\n", template.TypeLabelDisplay())
+			fmt.Println()
 
-		// Display metadata
-		if len(template.Definition.Metadata.Tags) > 0 {
-			fmt.Printf("Tags: %s\n", strings.Join(template.Definition.Metadata.Tags, ", "))
-		}
-		if template.Definition.Metadata.EstimatedDuration != "" {
-			fmt.Printf("Estimated Duration: %s\n", template.Definition.Metadata.EstimatedDuration)
-		}
-		if template.Definition.Metadata.Difficulty != "" {
-			fmt.Printf("Difficulty: %s\n", template.Definition.Metadata.Difficulty)
-		}
-		fmt.Println()
+			// Display metadata
+			if len(template.Definition.Metadata.Tags) > 0 {
+				fmt.Printf("Tags: %s\n", strings.Join(template.Definition.Metadata.Tags, ", "))
+			}
+			if template.Definition.Metadata.EstimatedDuration != "" {
+				fmt.Printf("Estimated Duration: %s\n", template.Definition.Metadata.EstimatedDuration)
+			}
+			if template.Definition.Metadata.Difficulty != "" {
+				fmt.Printf("Difficulty: %s\n", template.Definition.Metadata.Difficulty)
+			}
+			fmt.Println()
 
-		// Display inputs
-		fmt.Println("INPUTS:")
-		if len(template.Definition.Inputs) == 0 {
-			fmt.Println("  (none)")
-		} else {
-			for _, input := range template.Definition.Inputs {
-				required := ""
-				if input.Required {
-					required = " [required]"
-				}
-				fmt.Printf("  • %s (%s)%s\n", input.Name, input.Type, required)
-				fmt.Printf("    %s\n", input.Description)
-				if input.Default != "" {
-					fmt.Printf("    Default: %s\n", input.Default)
+			// Display inputs
+			printTemplateInputs(template.Definition.Inputs)
+			fmt.Println()
+
+			// Display structure
+			fmt.Println("STRUCTURE:")
+			structure, err := template.Definition.GetStructure()
+			if err != nil {
+				return fmt.Errorf("failed to load structure: %w", err)
+			}
+			printStructureTree(structure, "  ")
+			fmt.Println()
+
+			// Display outputs
+			printTemplateOutputs(template.Definition.Outputs)
+			fmt.Println()
+
+			// Display examples
+			if len(template.Definition.Examples) > 0 {
+				fmt.Println("EXAMPLES:")
+				for _, example := range template.Definition.Examples {
+					fmt.Printf("  %s\n", example.Description)
+					fmt.Printf("  $ %s\n", example.Command)
+					fmt.Println()
 				}
 			}
-		}
-		fmt.Println()
 
-		// Display structure
-		fmt.Println("STRUCTURE:")
-		structure, err := template.Definition.GetStructure()
-		if err != nil {
-			return fmt.Errorf("failed to load structure: %w", err)
-		}
-		printStructureTree(structure, "  ")
-		fmt.Println()
-
-		// Display outputs
-		fmt.Println("OUTPUTS:")
-		if len(template.Definition.Outputs) == 0 {
-			fmt.Println("  (none)")
-		} else {
-			for _, output := range template.Definition.Outputs {
-				required := ""
-				if output.Required {
-					required = " [required]"
-				}
-				fmt.Printf("  • %s (%s)%s\n", output.Name, output.Type, required)
-				fmt.Printf("    %s\n", output.Description)
-				if output.Format != "" {
-					fmt.Printf("    Format: %s\n", output.Format)
-				}
-			}
-		}
-		fmt.Println()
-
-		// Display examples
-		if len(template.Definition.Examples) > 0 {
-			fmt.Println("EXAMPLES:")
-			for _, example := range template.Definition.Examples {
-				fmt.Printf("  %s\n", example.Description)
-				fmt.Printf("  $ %s\n", example.Command)
+			// Display notes
+			if template.Definition.Notes != "" {
+				fmt.Println("NOTES:")
+				fmt.Println(template.Definition.Notes)
 				fmt.Println()
 			}
-		}
 
-		// Display notes
-		if template.Definition.Notes != "" {
-			fmt.Println("NOTES:")
-			fmt.Println(template.Definition.Notes)
-			fmt.Println()
-		}
-
-		return nil
+			return nil
 		})
 	},
 }

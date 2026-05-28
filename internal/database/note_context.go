@@ -16,7 +16,7 @@ type TemplatedNoteContext struct {
 
 // LoadTemplatedNoteContext loads a note and its template instance.
 func LoadTemplatedNoteContext(db *sql.DB, noteID int64) (*TemplatedNoteContext, error) {
-	note, err := GetNote(db, noteID)
+	note, err := GetNoteByID(db, noteID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note: %w", err)
 	}

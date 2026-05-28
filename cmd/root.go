@@ -34,40 +34,18 @@ func Execute() error {
 func init() {
 	cobra.OnInitialize(initConfig)
 
-	// Global flags
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.yoo.yaml)")
-	rootCmd.PersistentFlags().String("db", "", "database file path (default is $HOME/.yoo/yoo.db)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (overrides default search paths)")
+	rootCmd.PersistentFlags().String("db", "", "database file path (default is $HOME/.local/share/yoo/yoo.db)")
 
-	// Bind flags to viper
-	viper.BindPFlag("database.path", rootCmd.PersistentFlags().Lookup("db"))
+	if err := viper.BindPFlag("database.path", rootCmd.PersistentFlags().Lookup("db")); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
-// initConfig reads in config file and ENV variables if set.
 func initConfig() {
-	if cfgFile != "" {
-		// Use config file from the flag.
-		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-
-		// Search config in home directory with name ".yoo" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".yoo")
+	if err := config.Setup(config.Options{ConfigFile: cfgFile}); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
 	}
-
-	viper.AutomaticEnv() // read in environment variables that match
-
-	// If a config file is found, read it in.
-	if err := viper.ReadInConfig(); err == nil {
-		// Config file loaded successfully
-	}
-
-	// Initialize configuration
-	config.Init()
 }

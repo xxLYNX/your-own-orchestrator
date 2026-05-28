@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"yoo/internal/config"
 	"yoo/internal/database"
 	"yoo/internal/models"
 
@@ -58,14 +57,6 @@ Examples:
 			scheduleDate = time.Now()
 		}
 
-		// Initialize database
-		db, err := database.New(config.GetDatabasePath())
-		if err != nil {
-			log.Fatalf("Failed to initialize database: %v", err)
-		}
-		defer db.Close()
-
-		// Parse priority
 		priority := 0
 		switch strings.ToLower(addPriority) {
 		case "low":
@@ -76,41 +67,40 @@ Examples:
 			priority = 3
 		}
 
-		// Check if this is a templated note
-		if addTemplate != "" {
-			createTemplatedNote(db, noteText, scheduleDate, priority, addTemplate, addInputs)
-			return
-		}
+		// Open database and create note
+		if err := withDB(func(db *database.DB) error {
+			if addTemplate != "" {
+				return createTemplatedNote(db, noteText, scheduleDate, priority, addTemplate, addInputs)
+			}
 
-		// Create a simple note
-		note := &database.Note{
-			Title:       noteText,
-			Description: "",
-			ScheduledAt: scheduleDate,
-			Status:      "pending",
-			Priority:    priority,
-			CreatedAt:   time.Now(),
-			UpdatedAt:   time.Now(),
-		}
+			note := &database.Note{
+				Title:       noteText,
+				Description: "",
+				ScheduledAt: scheduleDate,
+				Status:      "pending",
+				Priority:    priority,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}
+			if err := database.CreateNote(db.Conn(), note); err != nil {
+				return fmt.Errorf("failed to add note: %w", err)
+			}
 
-		// Save to database
-		if err := database.CreateNote(db.Conn(), note); err != nil {
-			log.Fatalf("Failed to add note: %v", err)
-		}
-
-		// Success message
-		dateStr := scheduleDate.Format("2006-01-02")
-		if isToday(scheduleDate) {
-			fmt.Printf("✓ Added note for today: %s\n", noteText)
-		} else {
-			fmt.Printf("✓ Added note for %s: %s\n", dateStr, noteText)
-		}
-
-		if addPriority != "" {
-			fmt.Printf("  Priority: %s\n", addPriority)
-		}
-		if len(addTags) > 0 {
-			fmt.Printf("  Tags: %s\n", strings.Join(addTags, ", "))
+			dateStr := scheduleDate.Format("2006-01-02")
+			if isToday(scheduleDate) {
+				fmt.Printf("✓ Added note for today: %s\n", noteText)
+			} else {
+				fmt.Printf("✓ Added note for %s: %s\n", dateStr, noteText)
+			}
+			if addPriority != "" {
+				fmt.Printf("  Priority: %s\n", addPriority)
+			}
+			if len(addTags) > 0 {
+				fmt.Printf("  Tags: %s\n", strings.Join(addTags, ", "))
+			}
+			return nil
+		}); err != nil {
+			log.Fatalf("%v", err)
 		}
 	},
 }
@@ -132,12 +122,11 @@ func isToday(date time.Time) bool {
 	return date.Year() == now.Year() && date.YearDay() == now.YearDay()
 }
 
-// createTemplatedNote creates a note from a template
-func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, priority int, templateName string, inputs []string) {
-	// Get the template
+// createTemplatedNote creates a note from a template.
+func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, priority int, templateName string, inputs []string) error {
 	template, err := database.GetTemplateByName(db.Conn(), templateName)
 	if err != nil {
-		log.Fatalf("Failed to find template '%s': %v", templateName, err)
+		return fmt.Errorf("failed to find template '%s': %w", templateName, err)
 	}
 
 	// Parse inputs
@@ -145,7 +134,7 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 	for _, input := range inputs {
 		parts := strings.SplitN(input, "=", 2)
 		if len(parts) != 2 {
-			log.Fatalf("Invalid input format '%s', expected name=value", input)
+			return fmt.Errorf("invalid input format '%s', expected name=value", input)
 		}
 		name := strings.TrimSpace(parts[0])
 		value := strings.TrimSpace(parts[1])
@@ -182,7 +171,7 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 
 	// Validate inputs
 	if err := template.Definition.ValidateInputs(inputMap); err != nil {
-		log.Fatalf("Input validation failed: %v", err)
+		return fmt.Errorf("input validation failed: %w", err)
 	}
 
 	// Create the note
@@ -198,7 +187,7 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 	}
 
 	if err := database.CreateNote(db.Conn(), note); err != nil {
-		log.Fatalf("Failed to create note: %v", err)
+		return fmt.Errorf("failed to create note: %w", err)
 	}
 
 	// Create template instance
@@ -207,7 +196,7 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 	// Create note_template link and initialize steps
 	_, err = database.AttachTemplateToNote(db.Conn(), note.ID, template.ID, instance)
 	if err != nil {
-		log.Fatalf("Failed to link template: %v", err)
+		return fmt.Errorf("failed to link template: %w", err)
 	}
 
 	// Success message
@@ -225,4 +214,5 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 	if len(template.Definition.Outputs) > 0 {
 		fmt.Printf("  Outputs required: %d\n", len(template.Definition.GetRequiredOutputs()))
 	}
+	return nil
 }

@@ -26,42 +26,42 @@ const (
 
 // RecordsTableModel represents the records table view
 type RecordsTableModel struct {
-	db            *sql.DB
-	noteID        int64
-	records       []*models.TemplateRecord
-	recordSchema  *models.RecordSchema
-	cursor        int
-	page          int
-	perPage       int
-	filter        string
-	statusFilter  string // "all", "draft", "in_progress", "complete"
-	width, height int
-	viewMode      ViewMode
-	editingRecord *models.TemplateRecord
-	formData      map[string]interface{}
-	formCursor    int
-	searchInput   string
-	embedded      bool
+	db                *sql.DB
+	noteID            int64
+	records           []*models.TemplateRecord
+	recordSchema      *models.RecordSchema
+	cursor            int
+	page              int
+	perPage           int
+	filter            string
+	statusFilter      string // "all", "draft", "in_progress", "complete"
+	width, height     int
+	viewMode          ViewMode
+	editingRecord     *models.TemplateRecord
+	formData          map[string]interface{}
+	formCursor        int
+	searchInput       string
+	embedded          bool
 	repeatStackFilter models.RepeatStack // nil = all scopes
-	err           error
-	quitting      bool
+	err               error
+	quitting          bool
 }
 
 // NewRecordsTableModel creates a new records table model
 func NewRecordsTableModel(db *sql.DB, noteID int64, records []*models.TemplateRecord, schema *models.RecordSchema) RecordsTableModel {
 	return RecordsTableModel{
-		db:           db,
-		noteID:       noteID,
-		records:      records,
-		recordSchema: schema,
-		cursor:       0,
-		page:         0,
-		perPage:      20,
-		filter:       "",
-		statusFilter: "all",
-		viewMode:     ViewModeTable,
-		formData:     make(map[string]interface{}),
-		searchInput:  "",
+		db:                db,
+		noteID:            noteID,
+		records:           records,
+		recordSchema:      schema,
+		cursor:            0,
+		page:              0,
+		perPage:           20,
+		filter:            "",
+		statusFilter:      "all",
+		viewMode:          ViewModeTable,
+		formData:          make(map[string]interface{}),
+		searchInput:       "",
 		repeatStackFilter: nil,
 	}
 }
@@ -270,9 +270,10 @@ func (m RecordsTableModel) handleFormInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 
 	case "enter":
 		if m.formCursor == len(m.recordSchema.Fields) {
-			if m.viewMode == ViewModeAdd {
+			switch m.viewMode {
+			case ViewModeAdd:
 				m.addRecord()
-			} else if m.viewMode == ViewModeEdit {
+			case ViewModeEdit:
 				m.updateRecord()
 			}
 			if m.err == nil {
@@ -335,16 +336,15 @@ func (m *RecordsTableModel) getFieldString(field models.RecordField) string {
 }
 
 func (m *RecordsTableModel) setFieldString(field models.RecordField, value string) {
-	switch field.Type {
-	case "integer":
-		var parsed int
-		fmt.Sscanf(value, "%d", &parsed)
-		m.formData[field.Name] = parsed
-	case "boolean":
-		m.formData[field.Name] = value == "true" || value == "1"
-	default:
-		m.formData[field.Name] = value
+	if value == "" {
+		delete(m.formData, field.Name)
+		return
 	}
+	parsed, err := field.ParseStringValue(value)
+	if err != nil {
+		return
+	}
+	m.formData[field.Name] = parsed
 }
 
 func (m *RecordsTableModel) cycleEnumField(field models.RecordField, direction int) {
@@ -423,33 +423,7 @@ func (m RecordsTableModel) handleSearchInput(msg tea.KeyMsg) (tea.Model, tea.Cmd
 
 // getFilteredRecords returns records filtered by status and search term
 func (m RecordsTableModel) getFilteredRecords() []*models.TemplateRecord {
-	filtered := []*models.TemplateRecord{}
-
-	for _, record := range m.records {
-		// Apply status filter
-		if m.statusFilter != "all" && record.Status != m.statusFilter {
-			continue
-		}
-
-		// Apply search filter
-		if m.filter != "" {
-			match := false
-			// Search in record data
-			for _, value := range record.Data {
-				if strings.Contains(strings.ToLower(fmt.Sprintf("%v", value)), strings.ToLower(m.filter)) {
-					match = true
-					break
-				}
-			}
-			if !match {
-				continue
-			}
-		}
-
-		filtered = append(filtered, record)
-	}
-
-	return filtered
+	return models.FilterTemplateRecords(m.records, m.statusFilter, m.filter)
 }
 
 // initializeFormData sets default values for new records

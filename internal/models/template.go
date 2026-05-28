@@ -120,8 +120,8 @@ type TemplateRecord struct {
 	ID             int64                  `json:"id" db:"id"`
 	NoteTemplateID int64                  `json:"note_template_id" db:"note_template_id"`
 	RecordIndex    int                    `json:"record_index" db:"record_index"`
-	RepeatStack RepeatStack            `json:"repeat_stack" db:"repeat_stack_json"`
-	Data        map[string]interface{} `json:"data" db:"data"`
+	RepeatStack    RepeatStack            `json:"repeat_stack" db:"repeat_stack_json"`
+	Data           map[string]interface{} `json:"data" db:"data"`
 	Status         string                 `json:"status" db:"status"` // draft, in_progress, complete
 	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at" db:"updated_at"`
