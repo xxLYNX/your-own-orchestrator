@@ -341,3 +341,80 @@ func SyncLegacyNoteStepsFromShapeStates(db *sql.DB, noteTemplateID int64) error 
 	}
 	return nil
 }
+
+// ComputeTemplateProgress calculates overall completion for a templated note instance.
+func ComputeTemplateProgress(db *sql.DB, noteTemplateID int64, template *models.Template, inputs map[string]interface{}) (float64, error) {
+	states, err := ListShapeStates(db, noteTemplateID, -1)
+	if err != nil {
+		return 0, err
+	}
+
+	total := 0
+	done := 0
+	for _, state := range states {
+		switch state.Kind {
+		case models.ShapeChecklist:
+			for _, completed := range state.Data.ItemCompletion {
+				total++
+				if completed {
+					done++
+				}
+			}
+		case models.ShapeProcedure:
+			total++
+			if state.Completed {
+				done++
+			}
+		}
+	}
+
+	comp, err := template.Definition.GetComposition()
+	if err == nil && comp != nil {
+		var repeatNode *models.ShapeNode
+		var findRepeat func(*models.ShapeNode)
+		findRepeat = func(n *models.ShapeNode) {
+			if n == nil || repeatNode != nil {
+				return
+			}
+			if n.Kind == models.ShapeRepeat {
+				repeatNode = n
+				return
+			}
+			for i := range n.Steps {
+				findRepeat(&n.Steps[i])
+			}
+			if n.RepeatBody != nil {
+				findRepeat(n.RepeatBody)
+			}
+		}
+		findRepeat(comp)
+		if repeatNode != nil {
+			target := repeatNode.ResolveRepeatCount(inputs)
+			if target > 0 {
+				recordCount, err := CountTemplateRecords(db, noteTemplateID, -1)
+				if err != nil {
+					return 0, err
+				}
+				if recordCount > target {
+					recordCount = target
+				}
+				total += target
+				done += recordCount
+			}
+		}
+	}
+
+	if total == 0 {
+		return 0, nil
+	}
+	return float64(done) / float64(total), nil
+}
+
+// PersistTemplateProgress saves computed progress on the parent note.
+func PersistTemplateProgress(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template, inputs map[string]interface{}) error {
+	progress, err := ComputeTemplateProgress(db, noteTemplateID, template, inputs)
+	if err != nil {
+		return err
+	}
+	return UpdateTemplateProgress(db, noteID, progress)
+}

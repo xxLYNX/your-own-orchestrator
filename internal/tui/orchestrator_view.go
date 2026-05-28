@@ -26,6 +26,7 @@ type OrchestratorModel struct {
 	stepsModel     *StepsViewModel
 	artifactsModel *ArtifactsViewModel
 	panelMode      string
+	focusChecklist bool
 	db             *sql.DB
 	width, height  int
 	standalone     bool
@@ -108,6 +109,7 @@ func (m *OrchestratorModel) initChildPanels() error {
 			return err
 		}
 		m.stepsModel = stepsModel
+		m.focusChecklist = stepsModel.HasChecklist()
 	}
 
 	if m.template.Definition.HasArtifactShape() {
@@ -204,6 +206,9 @@ func (m *OrchestratorModel) updatePanel(msg tea.Msg) (tea.Model, tea.Cmd) {
 			updated, _ := m.stepsModel.Update(msg)
 			if sm, ok := updated.(*StepsViewModel); ok {
 				m.stepsModel = sm
+				if key, ok := msg.(tea.KeyMsg); ok && (key.String() == " " || key.String() == "enter") {
+					_ = m.persistProgress()
+				}
 			}
 		}
 	case "artifacts":
@@ -215,9 +220,14 @@ func (m *OrchestratorModel) updatePanel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "esc" {
+	if key, ok := msg.(tea.KeyMsg); ok {
 		if !m.panelCapturingInput() {
-			m.panelMode = ""
+			switch key.String() {
+			case "q":
+				m.panelMode = ""
+			case "esc":
+				return m.requestExit()
+			}
 		}
 	}
 	return m, nil
@@ -243,26 +253,42 @@ func (m *OrchestratorModel) panelCapturingInput() bool {
 
 func (m *OrchestratorModel) handleInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m.requestExit()
 	case "esc":
-		if len(m.navStack) > 1 {
-			m.navStack = m.navStack[:len(m.navStack)-1]
-			m.cursor = 0
+		return m.requestExit()
+	case "h":
+		m.drillOut()
+		m.syncStepsScope()
+	case "l", "enter", "o":
+		m.drillIntoSelection()
+		m.syncStepsScope()
+	case "tab":
+		if m.stepsModel != nil && m.stepsModel.HasChecklist() && m.listCount() > 0 {
+			m.focusChecklist = !m.focusChecklist
+		}
+	case " ":
+		if m.stepsModel != nil && m.stepsModel.HasChecklist() {
+			if err := m.stepsModel.ToggleCursor(); err != nil {
+				m.err = err
+			} else if err := m.persistProgress(); err != nil {
+				m.err = err
+			}
 			return m, nil
 		}
-		return m.requestExit()
 	case "up", "k":
-		if m.cursor > 0 {
+		if m.focusChecklist && m.stepsModel != nil && m.stepsModel.HasChecklist() {
+			m.stepsModel.MoveCursor(-1)
+		} else if m.cursor > 0 {
 			m.cursor--
 		}
 	case "down", "j":
-		if m.cursor < m.listCount()-1 {
+		if m.focusChecklist && m.stepsModel != nil && m.stepsModel.HasChecklist() {
+			m.stepsModel.MoveCursor(1)
+		} else if m.cursor < m.listCount()-1 {
 			m.cursor++
 		}
-	case "enter", "o":
-		m.drillIntoSelection()
-	case "l":
+	case "r":
 		if m.recordsModel != nil {
 			if err := m.refreshRecords(); err != nil {
 				m.err = err
@@ -286,6 +312,33 @@ func (m *OrchestratorModel) handleInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *OrchestratorModel) drillOut() {
+	if len(m.navStack) > 1 {
+		m.navStack = m.navStack[:len(m.navStack)-1]
+		m.cursor = 0
+	}
+}
+
+func (m *OrchestratorModel) syncStepsScope() {
+	if m.stepsModel == nil {
+		return
+	}
+	if err := m.refreshStepsScope(); err != nil {
+		m.err = err
+		return
+	}
+	m.focusChecklist = m.stepsModel.HasChecklist()
+}
+
+func (m *OrchestratorModel) persistProgress() error {
+	progress, err := database.ComputeTemplateProgress(m.db, m.noteTemplate.ID, m.template, m.inputs)
+	if err != nil {
+		return err
+	}
+	m.note.TemplateProgress = progress
+	return database.UpdateTemplateProgress(m.db, m.noteID, progress)
+}
+
 func (m *OrchestratorModel) requestExit() (tea.Model, tea.Cmd) {
 	if m.standalone {
 		m.quitting = true
@@ -303,7 +356,7 @@ func (m *OrchestratorModel) listCount() int {
 	if node.Kind == models.ShapeRepeat {
 		return node.ResolveRepeatCount(m.inputs)
 	}
-	return len(node.Children())
+	return len(node.NavigableChildren())
 }
 
 func (m *OrchestratorModel) drillIntoSelection() {
@@ -341,7 +394,7 @@ func (m *OrchestratorModel) drillIntoSelection() {
 		return
 	}
 
-	children := node.Children()
+	children := node.NavigableChildren()
 	if m.cursor < 0 || m.cursor >= len(children) {
 		return
 	}
@@ -409,9 +462,20 @@ func (m *OrchestratorModel) View() string {
 	var s strings.Builder
 	s.WriteString(m.renderHeader())
 	s.WriteString("\n")
+	s.WriteString(m.renderOverallProgress())
+	s.WriteString("\n")
 	s.WriteString(Divider(m.width))
 	s.WriteString("\n")
 	s.WriteString(m.renderTreeList())
+	if m.stepsModel != nil {
+		inline := m.stepsModel.RenderInlineSection()
+		if inline != "" {
+			s.WriteString("\n")
+			s.WriteString(Divider(m.width))
+			s.WriteString("\n")
+			s.WriteString(inline)
+		}
+	}
 	s.WriteString("\n")
 	s.WriteString(Divider(m.width))
 	s.WriteString("\n")
@@ -430,6 +494,19 @@ func (m *OrchestratorModel) renderHeader() string {
 	crumb := lipgloss.NewStyle().Foreground(ColorInfo).Render("📍 " + m.currentNav().String())
 	s.WriteString(crumb)
 	return s.String()
+}
+
+func (m *OrchestratorModel) renderOverallProgress() string {
+	progress, err := database.ComputeTemplateProgress(m.db, m.noteTemplate.ID, m.template, m.inputs)
+	if err != nil {
+		return WarningMessageStyle.Render("Progress unavailable")
+	}
+	m.note.TemplateProgress = progress
+	pct := int(progress * 100)
+	bar := ProgressBar(pct, 100, 40)
+	label := ProgressTextStyle.Render("Overall:")
+	pctLabel := ProgressPercentStyle.Render(fmt.Sprintf("%d%%", pct))
+	return label + " " + bar + " " + pctLabel
 }
 
 func (m *OrchestratorModel) renderTreeList() string {
@@ -460,8 +537,8 @@ func (m *OrchestratorModel) renderTreeList() string {
 		return s.String()
 	}
 
-	children := node.Children()
-	if len(children) == 0 {
+	children := node.NavigableChildren()
+	if len(children) == 0 && !m.focusChecklist {
 		kindHint := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("(%s leaf — press enter to open tools)", node.Kind))
 		s.WriteString(kindHint)
 		s.WriteString("\n")
@@ -524,17 +601,17 @@ func (m *OrchestratorModel) renderPanelView() string {
 	s.WriteString("\n")
 	s.WriteString(Divider(m.width))
 	s.WriteString("\n")
-	s.WriteString(HelpStyle.Render("esc: back to tree • q: exit note"))
+	s.WriteString(HelpStyle.Render("q: back to tree • esc: exit note"))
 	return s.String()
 }
 
 func (m *OrchestratorModel) renderFooter() string {
-	parts := []string{"enter: drill in", "esc: up/back", "q: exit"}
+	parts := []string{"jk: navigate", "space: toggle", "h/l: out/in", "tab: tree/checklist", "esc: exit"}
 	if m.recordsModel != nil {
-		parts = append(parts, "l: log")
+		parts = append(parts, "r: log")
 	}
 	if m.stepsModel != nil {
-		parts = append(parts, "p: procedure")
+		parts = append(parts, "p: procedure panel")
 	}
 	if m.artifactsModel != nil {
 		parts = append(parts, "f: artifacts")

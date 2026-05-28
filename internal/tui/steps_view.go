@@ -102,7 +102,7 @@ func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.S
 		return err
 	}
 
-	if checklist := node.FindFirstChecklist(); checklist != nil {
+	if checklist := node.ChecklistForScope(); checklist != nil {
 		ids := comp.PathTo(checklist.ID)
 		if len(ids) == 0 {
 			return fmt.Errorf("checklist not found in composition tree")
@@ -291,6 +291,45 @@ func (m *StepsViewModel) toggleRow(index int) error {
 		return nil
 	}
 	return m.toggleStepCompletion(m.steps[index])
+}
+
+// RenderInlineSection renders the progress bar and checklist for embedding in the orchestrator.
+func (m StepsViewModel) RenderInlineSection() string {
+	if m.rowCount() == 0 {
+		return ""
+	}
+	var s strings.Builder
+	s.WriteString(m.renderProgressBar())
+	s.WriteString("\n\n")
+	s.WriteString(m.renderStepsList())
+	return s.String()
+}
+
+// ToggleCursor toggles completion for the item under the cursor.
+func (m *StepsViewModel) ToggleCursor() error {
+	if m.rowCount() == 0 || m.cursor >= m.rowCount() {
+		return nil
+	}
+	return m.toggleRow(m.cursor)
+}
+
+// MoveCursor moves the checklist/step cursor by delta.
+func (m *StepsViewModel) MoveCursor(delta int) {
+	m.cursor += delta
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+	if m.cursor >= m.rowCount() {
+		m.cursor = m.rowCount() - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+}
+
+// HasChecklist returns whether scoped checklist items are loaded.
+func (m StepsViewModel) HasChecklist() bool {
+	return m.rowCount() > 0
 }
 
 // toggleStepCompletion toggles the completion status of a step

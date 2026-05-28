@@ -346,6 +346,35 @@ func (n *ShapeNode) FindByPath(path []string) *ShapeNode {
 	return nil
 }
 
+// ChecklistForScope returns the checklist to edit at this node (direct child first, else nested).
+func (n *ShapeNode) ChecklistForScope() *ShapeNode {
+	if n == nil {
+		return nil
+	}
+	for i := range n.Steps {
+		if n.Steps[i].Kind == ShapeChecklist {
+			return &n.Steps[i]
+		}
+	}
+	return nil
+}
+
+// NavigableChildren returns tree rows, omitting checklists shown inline at this level.
+func (n *ShapeNode) NavigableChildren() []ShapeNode {
+	children := n.Children()
+	if n.ChecklistForScope() != nil && n.Kind == ShapeProcedure {
+		filtered := make([]ShapeNode, 0, len(children))
+		for i := range children {
+			if children[i].Kind == ShapeChecklist {
+				continue
+			}
+			filtered = append(filtered, children[i])
+		}
+		return filtered
+	}
+	return children
+}
+
 // Children returns navigable children for a node.
 func (n *ShapeNode) Children() []ShapeNode {
 	switch n.Kind {
