@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -8,25 +9,27 @@ import (
 	"yoo/internal/database"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
-// ScheduleModel is the Bubble Tea model for the schedule view
+// ScheduleModel is the Bubble Tea model for the schedule view.
 type ScheduleModel struct {
+	db         *sql.DB
 	notes      []*database.Note
 	cursor     int
 	date       time.Time
 	width      int
 	height     int
+	detail     *OrchestratorModel
 	err        error
 	quitting   bool
 	addingNote bool
 	noteInput  string
 }
 
-// NewScheduleModel creates a new schedule model
-func NewScheduleModel(date time.Time, notes []*database.Note) ScheduleModel {
+// NewScheduleModel creates a new schedule model.
+func NewScheduleModel(db *sql.DB, date time.Time, notes []*database.Note) ScheduleModel {
 	return ScheduleModel{
+		db:         db,
 		notes:      notes,
 		cursor:     0,
 		date:       date,
@@ -35,21 +38,23 @@ func NewScheduleModel(date time.Time, notes []*database.Note) ScheduleModel {
 	}
 }
 
-// ShowSchedule launches the Bubble Tea TUI to display the schedule
-func ShowSchedule(notes []*database.Note, date time.Time) error {
-	model := NewScheduleModel(date, notes)
-	p := tea.NewProgram(model)
+// ShowSchedule launches the Bubble Tea TUI to display the schedule.
+func ShowSchedule(db *sql.DB, notes []*database.Note, date time.Time) error {
+	model := NewScheduleModel(db, date, notes)
+	p := tea.NewProgram(model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
-// Init initializes the model
 func (m ScheduleModel) Init() tea.Cmd {
 	return nil
 }
 
-// Update handles messages and updates the model
 func (m ScheduleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.detail != nil {
+		return m.updateDetail(msg)
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if m.addingNote {
@@ -70,7 +75,42 @@ func (m ScheduleModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// handleNormalInput handles keyboard input in normal mode
+func (m ScheduleModel) updateDetail(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.detail.Update(msg)
+	detail, ok := updated.(*OrchestratorModel)
+	if !ok {
+		return m, cmd
+	}
+
+	m.detail = detail
+	if detail.done {
+		m.detail = nil
+		refreshed, reloadCmd := m.reloadNotes()
+		return refreshed, reloadCmd
+	}
+
+	return m, cmd
+}
+
+func (m ScheduleModel) reloadNotes() (ScheduleModel, tea.Cmd) {
+	notes, err := database.GetNotesByDate(m.db, m.date)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+
+	m.notes = notes
+	if m.cursor >= len(m.notes) {
+		if len(m.notes) == 0 {
+			m.cursor = 0
+		} else {
+			m.cursor = len(m.notes) - 1
+		}
+	}
+
+	return m, nil
+}
+
 func (m ScheduleModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
@@ -88,36 +128,63 @@ func (m ScheduleModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "a", "n":
-		// Start adding a new note
 		m.addingNote = true
 		m.noteInput = ""
 
-	case "enter", " ":
-		// Toggle completion status
+	case "enter":
 		if len(m.notes) > 0 && m.cursor < len(m.notes) {
-			if m.notes[m.cursor].Status == "completed" {
-				m.notes[m.cursor].Status = "pending"
-			} else {
-				m.notes[m.cursor].Status = "completed"
+			note := m.notes[m.cursor]
+			if note.IsTemplated {
+				detail, err := NewOrchestratorModel(m.db, note.ID)
+				if err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.detail = detail
+				return m, nil
 			}
-			// In a real app, this would trigger a database update
+			return m.toggleNoteCompletion()
 		}
 
+	case " ":
+		return m.toggleNoteCompletion()
+
 	case "d":
-		// Delete the current note
 		if len(m.notes) > 0 && m.cursor < len(m.notes) {
+			note := m.notes[m.cursor]
+			if err := database.DeleteNote(m.db, note.ID); err != nil {
+				m.err = err
+				return m, nil
+			}
 			m.notes = append(m.notes[:m.cursor], m.notes[m.cursor+1:]...)
 			if m.cursor >= len(m.notes) && m.cursor > 0 {
 				m.cursor--
 			}
-			// In a real app, this would trigger a database delete
 		}
 	}
 
 	return m, nil
 }
 
-// handleAddNoteInput handles keyboard input when adding a note
+func (m ScheduleModel) toggleNoteCompletion() (ScheduleModel, tea.Cmd) {
+	if len(m.notes) == 0 || m.cursor >= len(m.notes) {
+		return m, nil
+	}
+
+	note := m.notes[m.cursor]
+	if note.Status == "completed" {
+		note.Status = "pending"
+	} else {
+		note.Status = "completed"
+	}
+
+	if err := database.UpdateNote(m.db, note); err != nil {
+		m.err = err
+	}
+
+	return m, nil
+}
+
 func (m ScheduleModel) handleAddNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
@@ -126,20 +193,21 @@ func (m ScheduleModel) handleAddNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "enter":
 		if m.noteInput != "" {
-			// Create new note
 			newNote := &database.Note{
-				ID:          int64(len(m.notes) + 1),
 				Title:       m.noteInput,
 				ScheduledAt: m.date,
 				Status:      "pending",
 				Priority:    0,
-				CreatedAt:   time.Now(),
-				UpdatedAt:   time.Now(),
 			}
+			if err := database.CreateNote(m.db, newNote); err != nil {
+				m.err = err
+				return m, nil
+			}
+
 			m.notes = append(m.notes, newNote)
+			m.cursor = len(m.notes) - 1
 			m.addingNote = false
 			m.noteInput = ""
-			// In a real app, this would trigger a database insert
 		}
 
 	case "backspace":
@@ -148,7 +216,6 @@ func (m ScheduleModel) handleAddNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		// Add character to input
 		if len(msg.String()) == 1 {
 			m.noteInput += msg.String()
 		}
@@ -157,10 +224,18 @@ func (m ScheduleModel) handleAddNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the TUI
 func (m ScheduleModel) View() string {
+	if m.detail != nil {
+		return m.detail.View()
+	}
+
 	if m.quitting {
-		return "Thanks for using yoo!\n"
+		return SuccessMessageStyle.Render("Thanks for using yoo!") + "\n"
+	}
+
+	if m.err != nil {
+		return ErrorMessageStyle.Render("Error: "+m.err.Error()) + "\n\n" +
+			HelpStyle.Render("Press q to quit")
 	}
 
 	if m.addingNote {
@@ -170,100 +245,70 @@ func (m ScheduleModel) View() string {
 	return m.renderScheduleView()
 }
 
-// renderScheduleView renders the main schedule view
 func (m ScheduleModel) renderScheduleView() string {
 	var s strings.Builder
 
-	// Header
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4")).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7D56F4")).
-		Padding(0, 1)
-
 	dateStr := m.date.Format("Monday, January 2, 2006")
-	s.WriteString(headerStyle.Render(fmt.Sprintf("📅 Schedule for %s", dateStr)))
+	s.WriteString(TitleWithBorderStyle.Render(fmt.Sprintf("📅 Schedule for %s", dateStr)))
 	s.WriteString("\n\n")
 
-	// Notes list
 	if len(m.notes) == 0 {
-		emptyStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#666666")).
-			Italic(true)
-		s.WriteString(emptyStyle.Render("No notes for this day. Press 'a' to add one."))
+		s.WriteString(EmptyState("No notes for this day. Press 'a' to add one."))
 		s.WriteString("\n\n")
 	} else {
 		for i, note := range m.notes {
-			cursor := " "
-			if m.cursor == i {
-				cursor = ">"
-			}
-
-			checkbox := "☐"
-			titleStyle := lipgloss.NewStyle()
-			if note.Status == "completed" {
-				checkbox = "☑"
-				titleStyle = titleStyle.
-					Foreground(lipgloss.Color("#666666")).
-					Strikethrough(true)
-			} else {
-				titleStyle = titleStyle.Foreground(lipgloss.Color("#FFFFFF"))
-			}
-
-			line := fmt.Sprintf("%s %s %s", cursor, checkbox, note.Title)
-			if m.cursor == i {
-				line = lipgloss.NewStyle().
-					Background(lipgloss.Color("#7D56F4")).
-					Foreground(lipgloss.Color("#FFFFFF")).
-					Render(line)
-			} else {
-				line = titleStyle.Render(line)
-			}
-
-			s.WriteString(line)
+			s.WriteString(m.renderNoteLine(i, note))
 			s.WriteString("\n")
 		}
 		s.WriteString("\n")
 	}
 
-	// Footer with help
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666")).
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#666666")).
-		Padding(0, 1)
-
-	helpText := "↑/k: up • ↓/j: down • enter/space: toggle • a: add • d: delete • q: quit"
-	s.WriteString(helpStyle.Render(helpText))
+	helpText := "↑/k ↓/j: navigate • enter: open/toggle • space: toggle • a: add • d: delete • q: quit"
+	s.WriteString(HelpWithBorderStyle.Render(helpText))
 
 	return s.String()
 }
 
-// renderAddNoteView renders the add note input view
+func (m ScheduleModel) renderNoteLine(index int, note *database.Note) string {
+	selected := m.cursor == index
+	completed := note.Status == "completed"
+
+	cursor := " "
+	if selected {
+		cursor = ">"
+	}
+
+	checkbox := "☐"
+	if completed {
+		checkbox = "☑"
+	}
+
+	title := note.Title
+	if note.IsTemplated {
+		progress := int(note.TemplateProgress * 100)
+		title = fmt.Sprintf("%s  template %d%%", note.Title, progress)
+	}
+
+	line := fmt.Sprintf("%s %s %s", cursor, checkbox, title)
+
+	switch {
+	case selected:
+		return ListItemSelectedStyle.Render(line)
+	case completed:
+		return ListItemCompletedStyle.Render(line)
+	default:
+		return ListItemStyle.Render(line)
+	}
+}
+
 func (m ScheduleModel) renderAddNoteView() string {
 	var s strings.Builder
 
-	titleStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#7D56F4"))
-
-	s.WriteString(titleStyle.Render("Add New Note"))
+	s.WriteString(TitleStyle.Render("Add New Note"))
 	s.WriteString("\n\n")
-
-	inputStyle := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#7D56F4")).
-		Padding(0, 1).
-		Width(50)
-
-	s.WriteString(inputStyle.Render(m.noteInput + "█"))
+	s.WriteString(InputFocusedStyle.Width(50).Render(m.noteInput + "█"))
 	s.WriteString("\n\n")
-
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#666666"))
-
-	s.WriteString(helpStyle.Render("enter: save • esc: cancel"))
+	s.WriteString(HelpStyle.Render("enter: save • esc: cancel"))
 
 	return s.String()
 }

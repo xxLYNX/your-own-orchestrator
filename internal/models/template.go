@@ -22,12 +22,21 @@ type Template struct {
 // TemplateDefinition is the complete template structure
 type TemplateDefinition struct {
 	Inputs       []TemplateInput   `json:"inputs" yaml:"inputs"`
+	Composition  *ShapeNode        `json:"composition,omitempty" yaml:"composition,omitempty"`
 	Steps        []TemplateStep    `json:"steps" yaml:"steps"`
 	Outputs      []TemplateOutput  `json:"outputs" yaml:"outputs"`
 	RecordSchema *RecordSchema     `json:"record_schema,omitempty" yaml:"record_schema,omitempty"`
 	Metadata     TemplateMetadata  `json:"metadata" yaml:"metadata"`
 	Examples     []TemplateExample `json:"examples,omitempty" yaml:"examples,omitempty"`
 	Notes        string            `json:"notes,omitempty" yaml:"notes,omitempty"`
+}
+
+// GetComposition returns the normalized composition tree for this template.
+func (td *TemplateDefinition) GetComposition() (*ShapeNode, error) {
+	if err := NormalizeTemplateDefinition(td); err != nil {
+		return nil, err
+	}
+	return td.Composition, nil
 }
 
 // RecordSchema defines the structure for repeating log-style records
@@ -145,16 +154,109 @@ type TemplateRecord struct {
 	ID             int64                  `json:"id" db:"id"`
 	NoteTemplateID int64                  `json:"note_template_id" db:"note_template_id"`
 	RecordIndex    int                    `json:"record_index" db:"record_index"`
-	Data           map[string]interface{} `json:"data" db:"data"`     // Stored as JSON
+	RepeatIndex    int                    `json:"repeat_index" db:"repeat_index"` // 0 = global; 1..N = repeat iteration
+	Data           map[string]interface{} `json:"data" db:"data"`                 // Stored as JSON
 	Status         string                 `json:"status" db:"status"` // draft, in_progress, complete
 	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at" db:"updated_at"`
 }
 
+// Template shape identifiers — see shape.go for composable primitives.
+const (
+	ShapeLogLegacy       = "log"
+	ShapeChecklistLegacy = "checklist" // legacy alias; prefer ShapeProcedure in docs
+	ShapeArtifactLegacy  = "artifact"
+)
+
+// HasLogShape reports whether the template uses the log shape.
+func (td *TemplateDefinition) HasLogShape() bool {
+	comp, err := td.GetComposition()
+	if err != nil || comp == nil {
+		return td.RecordSchema != nil && len(td.RecordSchema.Fields) > 0
+	}
+	return containsShapeKind(comp, ShapeLog)
+}
+
+// HasProcedureShape reports whether the template uses ordered procedures.
+func (td *TemplateDefinition) HasProcedureShape() bool {
+	comp, err := td.GetComposition()
+	if err != nil || comp == nil {
+		return len(td.Steps) > 0
+	}
+	return containsShapeKind(comp, ShapeProcedure)
+}
+
+// HasChecklistShape is kept for compatibility — means procedure or checklist nodes exist.
+func (td *TemplateDefinition) HasChecklistShape() bool {
+	return td.HasProcedureShape() || containsShapeKindFromDef(td, ShapeChecklist)
+}
+
+// HasArtifactShape reports whether the template uses artifact inputs/outputs.
+func (td *TemplateDefinition) HasArtifactShape() bool {
+	if len(td.Inputs) > 0 || len(td.Outputs) > 0 {
+		return true
+	}
+	return containsShapeKindFromDef(td, ShapeArtifact)
+}
+
+func containsShapeKindFromDef(td *TemplateDefinition, kind string) bool {
+	comp, err := td.GetComposition()
+	if err != nil || comp == nil {
+		return false
+	}
+	return containsShapeKind(comp, kind)
+}
+
+func containsShapeKind(node *ShapeNode, kind string) bool {
+	if node == nil {
+		return false
+	}
+	if node.Kind == kind {
+		return true
+	}
+	for i := range node.Steps {
+		if containsShapeKind(&node.Steps[i], kind) {
+			return true
+		}
+	}
+	for i := range node.Items {
+		if containsShapeKind(&node.Items[i], kind) {
+			return true
+		}
+	}
+	if node.RepeatBody != nil && containsShapeKind(node.RepeatBody, kind) {
+		return true
+	}
+	return false
+}
+
+// ActiveShapes returns human-readable shape kinds in this template.
+func (td *TemplateDefinition) ActiveShapes() []string {
+	comp, err := td.GetComposition()
+	if err != nil || comp == nil {
+		var shapes []string
+		if td.HasLogShape() {
+			shapes = append(shapes, ShapeLog)
+		}
+		if len(td.Steps) > 0 {
+			shapes = append(shapes, ShapeProcedure)
+		}
+		if td.HasArtifactShape() {
+			shapes = append(shapes, ShapeArtifact)
+		}
+		return shapes
+	}
+	return comp.ActiveShapeKinds()
+}
+
 // Validate checks if the template definition is valid
 func (td *TemplateDefinition) Validate() error {
-	if len(td.Steps) == 0 && td.RecordSchema == nil {
-		return fmt.Errorf("template must have at least one step or a record schema")
+	if err := NormalizeTemplateDefinition(td); err != nil {
+		return err
+	}
+
+	if td.Composition == nil {
+		return fmt.Errorf("template must define a composition tree or legacy shape fields")
 	}
 
 	// Validate step IDs are sequential
@@ -312,18 +414,61 @@ func (td *TemplateDefinition) GetRequiredOutputs() []TemplateOutput {
 
 // CalculateProgress calculates the completion percentage of a template instance
 func (ti *TemplateInstance) CalculateProgress() float64 {
-	if len(ti.Steps) == 0 {
-		return 0.0
+	return ti.CalculateProgressWithRecords(0, nil)
+}
+
+// CalculateProgressWithRecords factors in log rows and repeat targets when available.
+func (ti *TemplateInstance) CalculateProgressWithRecords(recordCount int, def *TemplateDefinition) float64 {
+	stepTotal := len(ti.Steps)
+	stepDone := ti.GetCompletedSteps()
+
+	if def == nil || stepTotal == 0 {
+		if stepTotal == 0 {
+			return 0
+		}
+		return float64(stepDone) / float64(stepTotal)
 	}
 
-	completedSteps := 0
-	for _, step := range ti.Steps {
-		if step.Completed {
-			completedSteps++
+	comp, err := def.GetComposition()
+	if err != nil || comp == nil {
+		return float64(stepDone) / float64(stepTotal)
+	}
+
+	var repeatNode *ShapeNode
+	var findRepeat func(*ShapeNode)
+	findRepeat = func(n *ShapeNode) {
+		if n == nil || repeatNode != nil {
+			return
+		}
+		if n.Kind == ShapeRepeat {
+			repeatNode = n
+			return
+		}
+		for i := range n.Steps {
+			findRepeat(&n.Steps[i])
+		}
+		if n.RepeatBody != nil {
+			findRepeat(n.RepeatBody)
 		}
 	}
+	findRepeat(comp)
 
-	return float64(completedSteps) / float64(len(ti.Steps))
+	if repeatNode == nil {
+		return float64(stepDone) / float64(stepTotal)
+	}
+
+	target := repeatNode.ResolveRepeatCount(ti.Inputs)
+	if target <= 0 {
+		return float64(stepDone) / float64(stepTotal)
+	}
+
+	if recordCount > target {
+		recordCount = target
+	}
+
+	totalUnits := stepTotal + target
+	doneUnits := stepDone + recordCount
+	return float64(doneUnits) / float64(totalUnits)
 }
 
 // GetCompletedSteps returns the number of completed steps
@@ -380,7 +525,9 @@ func (td *TemplateDefinition) UnmarshalJSON(data []byte) error {
 
 // NewTemplateInstance creates a new template instance from a definition
 func NewTemplateInstance(definition *TemplateDefinition, inputs map[string]interface{}) *TemplateInstance {
-	// Initialize steps
+	_ = NormalizeTemplateDefinition(definition)
+
+	// Initialize steps from normalized legacy sync (top-level procedures)
 	steps := make([]StepInstance, len(definition.Steps))
 	for i, defStep := range definition.Steps {
 		steps[i] = StepInstance{

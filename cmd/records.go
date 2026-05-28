@@ -176,7 +176,7 @@ Examples:
 		}
 
 		// Get next record index
-		nextIndex, err := database.GetNextRecordIndex(db.Conn(), noteTemplate.ID)
+		nextIndex, err := database.GetNextRecordIndex(db.Conn(), noteTemplate.ID, 0)
 		if err != nil {
 			return fmt.Errorf("failed to get next record index: %w", err)
 		}
@@ -238,7 +238,7 @@ Examples:
 		}
 
 		// Get records
-		records, err := database.ListTemplateRecords(db.Conn(), noteTemplate.ID)
+		records, err := database.ListTemplateRecords(db.Conn(), noteTemplate.ID, -1)
 		if err != nil {
 			return fmt.Errorf("failed to list records: %w", err)
 		}
@@ -344,7 +344,7 @@ Examples:
 		}
 
 		// Get the record
-		record, err := database.GetTemplateRecord(db.Conn(), noteTemplate.ID, recordIdx)
+		record, err := database.GetTemplateRecord(db.Conn(), noteTemplate.ID, 0, recordIdx)
 		if err != nil {
 			return fmt.Errorf("failed to get record: %w", err)
 		}
@@ -445,7 +445,7 @@ Example:
 		}
 
 		// Delete the record
-		if err := database.DeleteTemplateRecord(db.Conn(), noteTemplate.ID, recordIdx); err != nil {
+		if err := database.DeleteTemplateRecord(db.Conn(), noteTemplate.ID, 0, recordIdx); err != nil {
 			return fmt.Errorf("failed to delete record: %w", err)
 		}
 
@@ -488,7 +488,7 @@ Examples:
 		}
 
 		// Get records
-		records, err := database.ListTemplateRecords(db.Conn(), noteTemplate.ID)
+		records, err := database.ListTemplateRecords(db.Conn(), noteTemplate.ID, -1)
 		if err != nil {
 			return fmt.Errorf("failed to list records: %w", err)
 		}

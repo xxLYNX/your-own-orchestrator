@@ -192,6 +192,79 @@ DROP INDEX IF EXISTS idx_template_records_note_template;
 DROP TABLE IF EXISTS template_records;
 `,
 	},
+	{
+		Version:     3,
+		Name:        "add_repeat_index_to_template_records",
+		Description: "Scope log records to repeat iterations in composition trees",
+		Up: `
+-- Rebuild template_records with repeat_index for fractal repeat shapes
+CREATE TABLE IF NOT EXISTS template_records_v3 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_template_id INTEGER NOT NULL,
+    repeat_index INTEGER NOT NULL DEFAULT 0,
+    record_index INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (note_template_id) REFERENCES note_templates(id) ON DELETE CASCADE,
+    UNIQUE(note_template_id, repeat_index, record_index)
+);
+
+INSERT INTO template_records_v3 (id, note_template_id, repeat_index, record_index, data, status, created_at, updated_at)
+SELECT id, note_template_id, 0, record_index, data, status, created_at, updated_at
+FROM template_records;
+
+DROP TABLE template_records;
+ALTER TABLE template_records_v3 RENAME TO template_records;
+
+CREATE INDEX IF NOT EXISTS idx_template_records_note_template ON template_records(note_template_id);
+CREATE INDEX IF NOT EXISTS idx_template_records_status ON template_records(status);
+CREATE INDEX IF NOT EXISTS idx_template_records_index ON template_records(note_template_id, repeat_index, record_index);
+
+CREATE TRIGGER IF NOT EXISTS update_template_records_timestamp
+AFTER UPDATE ON template_records
+BEGIN
+    UPDATE template_records SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+`,
+		Down: `
+DROP TRIGGER IF EXISTS update_template_records_timestamp;
+DROP INDEX IF EXISTS idx_template_records_index;
+DROP INDEX IF EXISTS idx_template_records_status;
+DROP INDEX IF EXISTS idx_template_records_note_template;
+
+CREATE TABLE IF NOT EXISTS template_records_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_template_id INTEGER NOT NULL,
+    record_index INTEGER NOT NULL,
+    data TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (note_template_id) REFERENCES note_templates(id) ON DELETE CASCADE,
+    UNIQUE(note_template_id, record_index)
+);
+
+INSERT INTO template_records_v2 (id, note_template_id, record_index, data, status, created_at, updated_at)
+SELECT id, note_template_id, record_index, data, status, created_at, updated_at
+FROM template_records
+WHERE repeat_index = 0;
+
+DROP TABLE template_records;
+ALTER TABLE template_records_v2 RENAME TO template_records;
+
+CREATE INDEX IF NOT EXISTS idx_template_records_note_template ON template_records(note_template_id);
+CREATE INDEX IF NOT EXISTS idx_template_records_status ON template_records(status);
+CREATE INDEX IF NOT EXISTS idx_template_records_index ON template_records(note_template_id, record_index);
+
+CREATE TRIGGER IF NOT EXISTS update_template_records_timestamp
+AFTER UPDATE ON template_records
+BEGIN
+    UPDATE template_records SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+`,
+	},
 }
 
 // initMigrationsTable creates the migrations tracking table

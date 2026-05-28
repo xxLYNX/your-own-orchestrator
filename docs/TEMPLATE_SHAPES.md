@@ -2,7 +2,38 @@
 
 ## Executive Summary
 
-Templates in yoo support three fundamental "shapes" that can be combined to create powerful orchestration workflows:
+Templates in yoo are **fractal composition trees** built from composable **shapes**. A **Note** may optionally use a **Template**; the template's `composition` field defines nested shapes that you drill into in the orchestrator TUI.
+
+### Shape primitives
+
+| Shape | Purpose |
+|-------|---------|
+| **Procedure** | Ordered stages (may nest checklist, log, artifact, repeat) |
+| **Checklist** | Unordered items within a procedure step |
+| **Log** | Schema + repeating DB rows (operational data) |
+| **Artifact** | External files/URLs; export target for logs |
+| **Repeat** | Run a child subtree N times (e.g. `target_count` job applications) |
+
+Legacy flat fields (`steps`, `record_schema`) are still accepted and compiled into a composition tree automatically.
+
+### Example: Job Applications
+
+```
+Note
+├── Procedure: Preparation (once)
+├── Repeat × target_count: Single application
+│   ├── Procedure: Application workflow + checklist
+│   └── Log: Application record (scoped by repeat index)
+└── Procedure: Wrap up → export log → artifacts
+```
+
+Navigate with **enter** (drill in), **esc** (up/back), **l** (log panel), **p** (procedure/steps), **f** (artifacts).
+
+---
+
+## Legacy overview (flat model)
+
+The original three-tab model maps to shapes as follows:
 
 1. **LOG SHAPE** (Records) - Repeating structured data stored in the database
 2. **CHECKLIST SHAPE** (Steps) - Sequential workflow steps to complete

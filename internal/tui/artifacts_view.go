@@ -37,6 +37,7 @@ type ArtifactsViewModel struct {
 	formDescription  string
 	formRequired     bool
 
+	embedded   bool
 	err        error
 	successMsg string
 	quitting   bool
@@ -77,6 +78,16 @@ func ShowArtifacts(db *sql.DB, noteID int64, noteTemplateID int64, template *mod
 	return err
 }
 
+// IsCapturingInput reports whether keyboard input should go to this view exclusively.
+func (m *ArtifactsViewModel) IsCapturingInput() bool {
+	return m.viewMode != "list"
+}
+
+// SetEmbedded configures compact rendering for use inside the templated note view.
+func (m *ArtifactsViewModel) SetEmbedded(v bool) {
+	m.embedded = v
+}
+
 // Init initializes the model
 func (m ArtifactsViewModel) Init() tea.Cmd {
 	return nil
@@ -109,7 +120,16 @@ func (m ArtifactsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleListInput handles keyboard input in list mode
 func (m ArtifactsViewModel) handleListInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q", "esc":
+	case "ctrl+c":
+		if !m.embedded {
+			m.quitting = true
+			return m, tea.Quit
+		}
+
+	case "q", "esc":
+		if m.embedded {
+			return m, nil
+		}
 		m.quitting = true
 		return m, tea.Quit
 
@@ -299,15 +319,16 @@ func (m ArtifactsViewModel) renderListView() string {
 	var s strings.Builder
 
 	// Title
-	title := TitleStyle.Render("📦 Artifacts")
-	s.WriteString(title)
-	s.WriteString("\n\n")
-
-	// Template info
-	if m.template != nil {
-		templateInfo := SubtitleStyle.Render(fmt.Sprintf("Template: %s", m.template.Name))
-		s.WriteString(templateInfo)
+	if !m.embedded {
+		title := TitleStyle.Render("📦 Artifacts")
+		s.WriteString(title)
 		s.WriteString("\n\n")
+
+		if m.template != nil {
+			templateInfo := SubtitleStyle.Render(fmt.Sprintf("Template: %s", m.template.Name))
+			s.WriteString(templateInfo)
+			s.WriteString("\n\n")
+		}
 	}
 
 	// Group artifacts by type
@@ -370,15 +391,17 @@ func (m ArtifactsViewModel) renderListView() string {
 	}
 
 	// Help
-	help := KeyBindings(
-		"j/k", "navigate",
-		"enter/o", "open",
-		"a", "add",
-		"d", "delete",
-		"v", "details",
-		"q/esc", "back",
-	)
-	s.WriteString(HelpStyle.Render(help))
+	if !m.embedded {
+		help := KeyBindings(
+			"j/k", "navigate",
+			"enter/o", "open",
+			"a", "add",
+			"d", "delete",
+			"v", "details",
+			"q/esc", "back",
+		)
+		s.WriteString(HelpStyle.Render(help))
+	}
 
 	return s.String()
 }

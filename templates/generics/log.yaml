@@ -1,0 +1,63 @@
+name: "Blank Log"
+version: "1.0.0"
+description: "Track repeating structured entries in a table (log shape)"
+category: "generic"
+
+record_schema:
+  fields:
+    - name: "title"
+      type: "text"
+      description: "Entry title"
+      required: true
+    - name: "date"
+      type: "date"
+      description: "Date"
+      required: false
+    - name: "status"
+      type: "enum"
+      description: "Status"
+      required: true
+      default: "open"
+      values:
+        - "open"
+        - "in_progress"
+        - "done"
+    - name: "notes"
+      type: "text"
+      description: "Notes"
+      required: false
+
+composition:
+  id: root
+  kind: procedure
+  title: Workflow
+  steps:
+    - id: entries
+      kind: log
+      title: Entries
+      record_schema:
+        fields:
+          - name: "title"
+            type: "text"
+            required: true
+          - name: "date"
+            type: "date"
+            required: false
+          - name: "status"
+            type: "enum"
+            required: true
+            default: "open"
+            values: ["open", "in_progress", "done"]
+          - name: "notes"
+            type: "text"
+            required: false
+
+metadata:
+  tags:
+    - "generic"
+    - "log"
+  estimated_duration: "ongoing"
+  difficulty: "easy"
+
+notes: |
+  Customize record_schema fields for your data. Use `yoo records` or the log panel (l) in the TUI.

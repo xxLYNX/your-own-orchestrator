@@ -26,6 +26,7 @@ type StepsViewModel struct {
 	noteInput      string
 	width          int
 	height         int
+	embedded       bool
 	err            error
 	quitting       bool
 }
@@ -64,6 +65,16 @@ func ShowSteps(db *sql.DB, noteID int64, noteTemplateID int64, template *models.
 	return err
 }
 
+// IsCapturingInput reports whether keyboard input should go to this view exclusively.
+func (m *StepsViewModel) IsCapturingInput() bool {
+	return m.addingNote || m.showingDetails
+}
+
+// SetEmbedded configures compact rendering for use inside the templated note view.
+func (m *StepsViewModel) SetEmbedded(v bool) {
+	m.embedded = v
+}
+
 // Init initializes the model
 func (m StepsViewModel) Init() tea.Cmd {
 	return nil
@@ -94,7 +105,19 @@ func (m StepsViewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleNormalInput handles keyboard input in normal mode
 func (m StepsViewModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q", "esc":
+	case "ctrl+c":
+		if !m.embedded {
+			m.quitting = true
+			return m, tea.Quit
+		}
+
+	case "q", "esc":
+		if m.embedded {
+			if m.showingDetails {
+				m.showingDetails = false
+			}
+			return m, nil
+		}
 		m.quitting = true
 		return m, tea.Quit
 
@@ -235,10 +258,11 @@ func (m StepsViewModel) View() string {
 func (m StepsViewModel) renderStepsView() string {
 	var s strings.Builder
 
-	// Header with template name
-	header := TitleWithBorderStyle.Render(fmt.Sprintf("📋 %s", m.template.Name))
-	s.WriteString(header)
-	s.WriteString("\n\n")
+	if !m.embedded {
+		header := TitleWithBorderStyle.Render(fmt.Sprintf("📋 %s", m.template.Name))
+		s.WriteString(header)
+		s.WriteString("\n\n")
+	}
 
 	// Progress bar
 	s.WriteString(m.renderProgressBar())
@@ -248,14 +272,20 @@ func (m StepsViewModel) renderStepsView() string {
 	s.WriteString(m.renderStepsList())
 	s.WriteString("\n")
 
-	// Selected step details
+	// Selected step details (compact when embedded to avoid viewport overflow)
 	if len(m.steps) > 0 && m.cursor < len(m.steps) {
-		s.WriteString(m.renderSelectedStepPreview())
+		if m.embedded {
+			s.WriteString(m.renderCompactStepPreview())
+		} else {
+			s.WriteString(m.renderSelectedStepPreview())
+		}
 		s.WriteString("\n")
 	}
 
 	// Footer with help
-	s.WriteString(m.renderHelp())
+	if !m.embedded {
+		s.WriteString(m.renderHelp())
+	}
 
 	return s.String()
 }
@@ -301,16 +331,13 @@ func (m StepsViewModel) renderStepsList() string {
 	var s strings.Builder
 
 	for i, step := range m.steps {
-		// Cursor indicator
 		cursor := "  "
 		if i == m.cursor {
 			cursor = Cursor() + " "
 		}
 
-		// Checkbox
 		checkbox := Checkbox(step.Completed)
 
-		// Step number and title
 		stepNum := lipgloss.NewStyle().
 			Foreground(ColorSubtle).
 			Render(fmt.Sprintf("%d.", step.StepNumber))
@@ -328,7 +355,6 @@ func (m StepsViewModel) renderStepsList() string {
 
 		title := titleStyle.Render(step.Title)
 
-		// Completion date
 		dateStr := ""
 		if step.Completed && step.CompletedAt != nil {
 			dateStr = lipgloss.NewStyle().
@@ -336,21 +362,62 @@ func (m StepsViewModel) renderStepsList() string {
 				Render(fmt.Sprintf("  ✓ Completed %s", step.CompletedAt.Format("2006-01-02")))
 		}
 
-		// Combine line
 		line := fmt.Sprintf("%s%s %s %s%s", cursor, checkbox, stepNum, title, dateStr)
 
-		// Highlight selected row
 		if i == m.cursor {
+			plainCheck := "☐"
+			if step.Completed {
+				plainCheck = "☑"
+			}
+			plainDate := ""
+			if step.Completed && step.CompletedAt != nil {
+				plainDate = fmt.Sprintf("  ✓ Completed %s", step.CompletedAt.Format("2006-01-02"))
+			}
+			plainLine := fmt.Sprintf("> %s %d. %s%s", plainCheck, step.StepNumber, step.Title, plainDate)
+
+			pad := ""
+			if m.width > 2 {
+				target := m.width - 2
+				if w := lipgloss.Width(plainLine); w < target {
+					pad = strings.Repeat(" ", target-w)
+				}
+			}
+
 			line = lipgloss.NewStyle().
 				Background(lipgloss.Color("#2A2A2A")).
-				Width(m.width - 2).
-				Render(line)
+				Render(line + pad)
 		}
 
 		s.WriteString(line)
 		s.WriteString("\n")
 	}
 
+	return s.String()
+}
+
+// renderCompactStepPreview renders a short preview when embedded in the templated note tab.
+func (m StepsViewModel) renderCompactStepPreview() string {
+	if len(m.steps) == 0 || m.cursor >= len(m.steps) {
+		return ""
+	}
+
+	step := m.steps[m.cursor]
+	var s strings.Builder
+
+	header := SectionHeaderStyle.Render(fmt.Sprintf("Selected: %d. %s", step.StepNumber, step.Title))
+	s.WriteString(header)
+	s.WriteString("\n")
+
+	if step.Description != "" {
+		desc := lipgloss.NewStyle().
+			Foreground(ColorSubtle).
+			Italic(true).
+			Render(step.Description)
+		s.WriteString(desc)
+		s.WriteString("\n")
+	}
+
+	s.WriteString(HelpStyle.Render("v: full details • n: add note"))
 	return s.String()
 }
 

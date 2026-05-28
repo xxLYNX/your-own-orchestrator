@@ -48,7 +48,7 @@ var scheduleCmd = &cobra.Command{
 		}
 
 		// Launch TUI
-		if err := tui.ShowSchedule(notes, targetDate); err != nil {
+		if err := tui.ShowSchedule(db.Conn(), notes, targetDate); err != nil {
 			return fmt.Errorf("failed to display schedule: %w", err)
 		}
 

@@ -1,0 +1,522 @@
+package tui
+
+import (
+	"database/sql"
+	"fmt"
+	"strings"
+
+	"yoo/internal/database"
+	"yoo/internal/models"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+)
+
+// OrchestratorModel navigates the fractal composition tree for a templated note.
+type OrchestratorModel struct {
+	noteID         int64
+	note           *database.Note
+	noteTemplate   *models.NoteTemplate
+	template       *models.Template
+	composition    *models.ShapeNode
+	inputs         map[string]interface{}
+	navStack       []models.NavContext
+	cursor         int
+	recordsModel   *RecordsTableModel
+	stepsModel     *StepsViewModel
+	artifactsModel *ArtifactsViewModel
+	panelMode      string
+	db             *sql.DB
+	width, height  int
+	standalone     bool
+	done           bool
+	err            error
+	quitting       bool
+}
+
+// NewOrchestratorModel creates a tree navigator for a templated note.
+func NewOrchestratorModel(db *sql.DB, noteID int64) (*OrchestratorModel, error) {
+	return newOrchestratorModel(db, noteID, false)
+}
+
+func newOrchestratorModel(db *sql.DB, noteID int64, standalone bool) (*OrchestratorModel, error) {
+	note, err := database.GetNoteByID(db, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load note: %w", err)
+	}
+	if !note.IsTemplated {
+		return nil, fmt.Errorf("note is not templated")
+	}
+
+	noteTemplate, err := database.GetNoteTemplate(db, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load note template: %w", err)
+	}
+
+	template, err := database.GetTemplateByID(db, noteTemplate.TemplateID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load template: %w", err)
+	}
+
+	comp, err := template.Definition.GetComposition()
+	if err != nil {
+		return nil, err
+	}
+
+	m := &OrchestratorModel{
+		noteID:       noteID,
+		note:         note,
+		noteTemplate: noteTemplate,
+		template:     template,
+		composition:  comp,
+		inputs:       noteTemplate.TemplateData.Inputs,
+		navStack:     []models.NavContext{{Path: []string{comp.ID}}},
+		db:           db,
+		standalone:   standalone,
+		width:        80,
+		height:       24,
+	}
+
+	if err := m.initChildPanels(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (m *OrchestratorModel) initChildPanels() error {
+	if logNode := m.composition.FindFirstLogNode(); logNode != nil {
+		records, err := database.ListTemplateRecords(m.db, m.noteTemplate.ID, -1)
+		if err != nil {
+			return err
+		}
+		rm := NewRecordsTableModel(m.db, m.noteTemplate.ID, records, logNode.RecordSchema)
+		rm.SetEmbedded(true)
+		rm.SetRepeatFilter(-1)
+		m.recordsModel = &rm
+	}
+
+	if m.template.Definition.HasProcedureShape() {
+		stepsModel, err := NewStepsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template)
+		if err != nil {
+			return err
+		}
+		stepsModel.SetEmbedded(true)
+		m.stepsModel = stepsModel
+	}
+
+	if m.template.Definition.HasArtifactShape() {
+		artifactsModel, err := NewArtifactsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template)
+		if err != nil {
+			return err
+		}
+		artifactsModel.SetEmbedded(true)
+		m.artifactsModel = artifactsModel
+	}
+	return nil
+}
+
+// ShowTemplatedNote launches a standalone orchestrator session.
+func ShowTemplatedNote(db *sql.DB, noteID int64) error {
+	model, err := newOrchestratorModel(db, noteID, true)
+	if err != nil {
+		return err
+	}
+	p := tea.NewProgram(model, tea.WithAltScreen())
+	_, err = p.Run()
+	return err
+}
+
+func (m *OrchestratorModel) currentNav() models.NavContext {
+	if len(m.navStack) == 0 {
+		return models.NavContext{Path: []string{m.composition.ID}}
+	}
+	return m.navStack[len(m.navStack)-1]
+}
+
+func (m *OrchestratorModel) currentNode() *models.ShapeNode {
+	return m.composition.FindByPath(m.currentNav().Path)
+}
+
+func (m *OrchestratorModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m *OrchestratorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.panelMode != "" {
+		return m.updatePanel(msg)
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return m.handleInput(msg)
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
+		m.resizeChildPanels()
+		return m, nil
+	case error:
+		m.err = msg
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *OrchestratorModel) resizeChildPanels() {
+	h := m.height - 12
+	if h < 8 {
+		h = 8
+	}
+	w := m.width - 4
+	if w < 40 {
+		w = 40
+	}
+	if m.recordsModel != nil {
+		m.recordsModel.width = w
+		m.recordsModel.height = h
+	}
+	if m.stepsModel != nil {
+		m.stepsModel.width = w
+		m.stepsModel.height = h
+	}
+	if m.artifactsModel != nil {
+		m.artifactsModel.width = w
+		m.artifactsModel.height = h
+	}
+}
+
+func (m *OrchestratorModel) updatePanel(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch m.panelMode {
+	case "log":
+		if m.recordsModel != nil {
+			updated, _ := m.recordsModel.Update(msg)
+			if rm, ok := updated.(RecordsTableModel); ok {
+				*m.recordsModel = rm
+			}
+		}
+	case "steps":
+		if m.stepsModel != nil {
+			updated, _ := m.stepsModel.Update(msg)
+			if sm, ok := updated.(*StepsViewModel); ok {
+				m.stepsModel = sm
+			}
+		}
+	case "artifacts":
+		if m.artifactsModel != nil {
+			updated, _ := m.artifactsModel.Update(msg)
+			if am, ok := updated.(ArtifactsViewModel); ok {
+				*m.artifactsModel = am
+			}
+		}
+	}
+
+	if key, ok := msg.(tea.KeyMsg); ok && key.String() == "esc" {
+		if !m.panelCapturingInput() {
+			m.panelMode = ""
+		}
+	}
+	return m, nil
+}
+
+func (m *OrchestratorModel) panelCapturingInput() bool {
+	switch m.panelMode {
+	case "log":
+		if m.recordsModel != nil {
+			return m.recordsModel.IsCapturingInput()
+		}
+	case "steps":
+		if m.stepsModel != nil {
+			return m.stepsModel.IsCapturingInput()
+		}
+	case "artifacts":
+		if m.artifactsModel != nil {
+			return m.artifactsModel.IsCapturingInput()
+		}
+	}
+	return false
+}
+
+func (m *OrchestratorModel) handleInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m.requestExit()
+	case "esc":
+		if len(m.navStack) > 1 {
+			m.navStack = m.navStack[:len(m.navStack)-1]
+			m.cursor = 0
+			return m, nil
+		}
+		return m.requestExit()
+	case "up", "k":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "down", "j":
+		if m.cursor < m.listCount()-1 {
+			m.cursor++
+		}
+	case "enter", "o":
+		m.drillIntoSelection()
+	case "l":
+		if m.recordsModel != nil {
+			if err := m.refreshRecords(); err != nil {
+				m.err = err
+				return m, nil
+			}
+			m.panelMode = "log"
+		}
+	case "p":
+		if m.stepsModel != nil {
+			m.panelMode = "steps"
+		}
+	case "f":
+		if m.artifactsModel != nil {
+			m.panelMode = "artifacts"
+		}
+	}
+	return m, nil
+}
+
+func (m *OrchestratorModel) requestExit() (tea.Model, tea.Cmd) {
+	if m.standalone {
+		m.quitting = true
+		return m, tea.Quit
+	}
+	m.done = true
+	return m, nil
+}
+
+func (m *OrchestratorModel) listCount() int {
+	node := m.currentNode()
+	if node == nil {
+		return 0
+	}
+	if node.Kind == models.ShapeRepeat {
+		return node.ResolveRepeatCount(m.inputs)
+	}
+	return len(node.Children())
+}
+
+func (m *OrchestratorModel) drillIntoSelection() {
+	node := m.currentNode()
+	if node == nil {
+		return
+	}
+
+	switch node.Kind {
+	case models.ShapeLog:
+		if err := m.refreshRecords(); err != nil {
+			m.err = err
+			return
+		}
+		m.panelMode = "log"
+		return
+	case models.ShapeArtifact:
+		m.panelMode = "artifacts"
+		return
+	case models.ShapeRepeat:
+		count := node.ResolveRepeatCount(m.inputs)
+		if m.cursor < 0 || m.cursor >= count || node.RepeatBody == nil {
+			return
+		}
+		nav := m.currentNav()
+		m.navStack = append(m.navStack, models.NavContext{
+			Path:        append(append([]string{}, nav.Path...), node.RepeatBody.ID),
+			RepeatIndex: m.cursor + 1,
+		})
+		m.cursor = 0
+		return
+	}
+
+	children := node.Children()
+	if m.cursor < 0 || m.cursor >= len(children) {
+		return
+	}
+	child := children[m.cursor]
+	nav := m.currentNav()
+	m.navStack = append(m.navStack, models.NavContext{
+		Path: append(append([]string{}, nav.Path...), child.ID),
+	})
+	m.cursor = 0
+}
+
+func (m *OrchestratorModel) recordRepeatScope() int {
+	nav := m.currentNav()
+	if nav.RepeatIndex > 0 {
+		return nav.RepeatIndex
+	}
+	return -1
+}
+
+func (m *OrchestratorModel) refreshRecords() error {
+	if m.recordsModel == nil {
+		return nil
+	}
+
+	scope := m.recordRepeatScope()
+	logNode := m.composition.FindFirstLogNode()
+	if node := m.currentNode(); node != nil {
+		if scoped := node.FindLogNodeInSubtree(); scoped != nil {
+			logNode = scoped
+		}
+	}
+	if logNode == nil {
+		return fmt.Errorf("no log shape found")
+	}
+
+	records, err := database.ListTemplateRecords(m.db, m.noteTemplate.ID, scope)
+	if err != nil {
+		return err
+	}
+
+	m.recordsModel.recordSchema = logNode.RecordSchema
+	m.recordsModel.SetRepeatFilter(scope)
+	m.recordsModel.ReloadRecords(records)
+	return nil
+}
+
+func (m *OrchestratorModel) View() string {
+	if m.quitting {
+		return SuccessMessageStyle.Render("✓ Saved!") + "\n"
+	}
+	if m.err != nil {
+		return ErrorMessageStyle.Render("Error: "+m.err.Error()) + "\n"
+	}
+	if m.panelMode != "" {
+		return m.renderPanelView()
+	}
+
+	var s strings.Builder
+	s.WriteString(m.renderHeader())
+	s.WriteString("\n")
+	s.WriteString(Divider(m.width))
+	s.WriteString("\n")
+	s.WriteString(m.renderTreeList())
+	s.WriteString("\n")
+	s.WriteString(Divider(m.width))
+	s.WriteString("\n")
+	s.WriteString(m.renderFooter())
+	return s.String()
+}
+
+func (m *OrchestratorModel) renderHeader() string {
+	var s strings.Builder
+	s.WriteString(TitleStyle.Render(m.note.Title))
+	s.WriteString("\n")
+	shapes := strings.Join(m.composition.ActiveShapeKinds(), " + ")
+	meta := fmt.Sprintf("Template: %s v%s  •  shapes: %s", m.template.Name, m.template.Version, shapes)
+	s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(meta))
+	s.WriteString("\n")
+	crumb := lipgloss.NewStyle().Foreground(ColorInfo).Render("📍 " + m.currentNav().String())
+	s.WriteString(crumb)
+	return s.String()
+}
+
+func (m *OrchestratorModel) renderTreeList() string {
+	node := m.currentNode()
+	if node == nil {
+		return EmptyState("Nothing to show")
+	}
+
+	var s strings.Builder
+	title := SectionHeaderStyle.Render(node.DisplayTitle())
+	if node.Description != "" {
+		title += " — " + lipgloss.NewStyle().Foreground(ColorSubtle).Italic(true).Render(node.Description)
+	}
+	s.WriteString(title)
+	s.WriteString("\n\n")
+
+	if node.Kind == models.ShapeRepeat {
+		count := node.ResolveRepeatCount(m.inputs)
+		if count == 0 {
+			s.WriteString(WarningMessageStyle.Render("Set repeat count via template inputs (e.g. target_count)."))
+			s.WriteString("\n")
+			return s.String()
+		}
+		for i := 0; i < count; i++ {
+			s.WriteString(m.renderTreeLine(i, fmt.Sprintf("%s #%d", node.DisplayTitle(), i+1), i == m.cursor))
+			s.WriteString("\n")
+		}
+		return s.String()
+	}
+
+	children := node.Children()
+	if len(children) == 0 {
+		kindHint := lipgloss.NewStyle().Foreground(ColorMuted).Render(fmt.Sprintf("(%s leaf — press enter to open tools)", node.Kind))
+		s.WriteString(kindHint)
+		s.WriteString("\n")
+		return s.String()
+	}
+
+	for i, child := range children {
+		label := fmt.Sprintf("[%s] %s", child.Kind, child.DisplayTitle())
+		s.WriteString(m.renderTreeLine(i, label, i == m.cursor))
+		s.WriteString("\n")
+	}
+	return s.String()
+}
+
+func (m *OrchestratorModel) renderTreeLine(index int, label string, selected bool) string {
+	cursor := "  "
+	if selected {
+		cursor = Cursor() + " "
+	}
+	line := fmt.Sprintf("%s%s", cursor, label)
+	if selected {
+		pad := ""
+		if m.width > 2 {
+			plain := cursor + label
+			if w := lipgloss.Width(plain); w < m.width-2 {
+				pad = strings.Repeat(" ", m.width-2-w)
+			}
+		}
+		return lipgloss.NewStyle().
+			Foreground(ColorPrimary).
+			Bold(true).
+			Background(lipgloss.Color("#2A2A2A")).
+			Render(line + pad)
+	}
+	return ListItemStyle.Render(line)
+}
+
+func (m *OrchestratorModel) renderPanelView() string {
+	var s strings.Builder
+	s.WriteString(m.renderHeader())
+	s.WriteString("\n")
+	s.WriteString(Divider(m.width))
+	s.WriteString("\n")
+
+	switch m.panelMode {
+	case "log":
+		if m.recordsModel != nil {
+			s.WriteString(m.recordsModel.View())
+		}
+	case "steps":
+		if m.stepsModel != nil {
+			s.WriteString(m.stepsModel.View())
+		}
+	case "artifacts":
+		if m.artifactsModel != nil {
+			s.WriteString(m.artifactsModel.View())
+		}
+	}
+
+	s.WriteString("\n")
+	s.WriteString(Divider(m.width))
+	s.WriteString("\n")
+	s.WriteString(HelpStyle.Render("esc: back to tree • q: exit note"))
+	return s.String()
+}
+
+func (m *OrchestratorModel) renderFooter() string {
+	parts := []string{"enter: drill in", "esc: up/back", "q: exit"}
+	if m.recordsModel != nil {
+		parts = append(parts, "l: log")
+	}
+	if m.stepsModel != nil {
+		parts = append(parts, "p: procedure")
+	}
+	if m.artifactsModel != nil {
+		parts = append(parts, "f: artifacts")
+	}
+	return HelpStyle.Render(strings.Join(parts, " • "))
+}

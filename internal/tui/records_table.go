@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
 
+	"yoo/internal/database"
 	"yoo/internal/models"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,6 +26,7 @@ const (
 
 // RecordsTableModel represents the records table view
 type RecordsTableModel struct {
+	db            *sql.DB
 	noteID        int64
 	records       []*models.TemplateRecord
 	recordSchema  *models.RecordSchema
@@ -38,13 +41,16 @@ type RecordsTableModel struct {
 	formData      map[string]interface{}
 	formCursor    int
 	searchInput   string
+	embedded      bool
+	repeatFilter  int // -1 = all scopes, >=0 filters to repeat_index
 	err           error
 	quitting      bool
 }
 
 // NewRecordsTableModel creates a new records table model
-func NewRecordsTableModel(noteID int64, records []*models.TemplateRecord, schema *models.RecordSchema) RecordsTableModel {
+func NewRecordsTableModel(db *sql.DB, noteID int64, records []*models.TemplateRecord, schema *models.RecordSchema) RecordsTableModel {
 	return RecordsTableModel{
+		db:           db,
 		noteID:       noteID,
 		records:      records,
 		recordSchema: schema,
@@ -56,10 +62,36 @@ func NewRecordsTableModel(noteID int64, records []*models.TemplateRecord, schema
 		viewMode:     ViewModeTable,
 		formData:     make(map[string]interface{}),
 		searchInput:  "",
+		repeatFilter: -1,
 	}
 }
 
-// Init initializes the model
+// SetRepeatFilter scopes visible records (-1 = all, >=0 = repeat iteration).
+func (m *RecordsTableModel) SetRepeatFilter(repeatIndex int) {
+	m.repeatFilter = repeatIndex
+}
+
+// ReloadRecords replaces in-memory records (after DB reload).
+func (m *RecordsTableModel) ReloadRecords(records []*models.TemplateRecord) {
+	m.records = records
+	if m.cursor >= len(m.records) {
+		m.cursor = 0
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
+}
+
+// IsCapturingInput reports whether keyboard input should go to this view exclusively.
+func (m RecordsTableModel) IsCapturingInput() bool {
+	return m.viewMode != ViewModeTable
+}
+
+// SetEmbedded configures compact rendering for use inside the templated note view.
+func (m *RecordsTableModel) SetEmbedded(v bool) {
+	m.embedded = v
+}
+
 func (m RecordsTableModel) Init() tea.Cmd {
 	return nil
 }
@@ -101,7 +133,18 @@ func (m RecordsTableModel) handleTableInput(msg tea.KeyMsg) (tea.Model, tea.Cmd)
 	}
 
 	switch msg.String() {
-	case "ctrl+c", "q", "esc":
+	case "ctrl+c":
+		if !m.embedded {
+			m.quitting = true
+			return m, tea.Quit
+		}
+
+	case "q", "esc":
+		if m.embedded {
+			m.viewMode = ViewModeTable
+			m.formData = make(map[string]interface{})
+			return m, nil
+		}
 		m.quitting = true
 		return m, tea.Quit
 
@@ -213,6 +256,7 @@ func (m RecordsTableModel) handleFormInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 	case "esc":
 		m.viewMode = ViewModeTable
 		m.formData = make(map[string]interface{})
+		return m, nil
 
 	case "up", "shift+tab":
 		if m.formCursor > 0 {
@@ -226,20 +270,106 @@ func (m RecordsTableModel) handleFormInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) 
 
 	case "enter":
 		if m.formCursor == len(m.recordSchema.Fields) {
-			// Submit form
 			if m.viewMode == ViewModeAdd {
 				m.addRecord()
 			} else if m.viewMode == ViewModeEdit {
 				m.updateRecord()
 			}
-			m.viewMode = ViewModeTable
+			if m.err == nil {
+				m.viewMode = ViewModeTable
+			}
 		} else {
-			// Move to next field (in real implementation, would open field editor)
 			m.formCursor++
+			if m.formCursor > len(m.recordSchema.Fields) {
+				m.formCursor = len(m.recordSchema.Fields)
+			}
+		}
+
+	default:
+		if m.formCursor >= len(m.recordSchema.Fields) {
+			return m, nil
+		}
+
+		field := m.recordSchema.Fields[m.formCursor]
+
+		switch field.Type {
+		case "enum":
+			if msg.String() == "j" || msg.String() == "down" {
+				m.cycleEnumField(field, 1)
+				return m, nil
+			}
+			if msg.String() == "k" || msg.String() == "up" {
+				m.cycleEnumField(field, -1)
+				return m, nil
+			}
+		case "boolean":
+			if msg.String() == " " {
+				current, _ := m.formData[field.Name].(bool)
+				m.formData[field.Name] = !current
+				return m, nil
+			}
+		}
+
+		switch msg.String() {
+		case "backspace":
+			current := m.getFieldString(field)
+			if len(current) > 0 {
+				m.setFieldString(field, current[:len(current)-1])
+			}
+		default:
+			if len(msg.String()) == 1 && field.Type != "boolean" {
+				m.setFieldString(field, m.getFieldString(field)+msg.String())
+			}
 		}
 	}
 
 	return m, nil
+}
+
+func (m *RecordsTableModel) getFieldString(field models.RecordField) string {
+	value := m.formData[field.Name]
+	if value == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", value)
+}
+
+func (m *RecordsTableModel) setFieldString(field models.RecordField, value string) {
+	switch field.Type {
+	case "integer":
+		var parsed int
+		fmt.Sscanf(value, "%d", &parsed)
+		m.formData[field.Name] = parsed
+	case "boolean":
+		m.formData[field.Name] = value == "true" || value == "1"
+	default:
+		m.formData[field.Name] = value
+	}
+}
+
+func (m *RecordsTableModel) cycleEnumField(field models.RecordField, direction int) {
+	if len(field.Values) == 0 {
+		return
+	}
+
+	current := m.getFieldString(field)
+	index := 0
+	for i, value := range field.Values {
+		if value == current {
+			index = i
+			break
+		}
+	}
+
+	index += direction
+	if index < 0 {
+		index = len(field.Values) - 1
+	}
+	if index >= len(field.Values) {
+		index = 0
+	}
+
+	m.formData[field.Name] = field.Values[index]
 }
 
 // handleDeleteInput handles keyboard input in delete confirmation mode
@@ -345,35 +475,73 @@ func (m *RecordsTableModel) initializeFormData() {
 	}
 }
 
-// addRecord adds a new record (in real implementation, this would call database)
+func (m *RecordsTableModel) copyFormData() map[string]interface{} {
+	copied := make(map[string]interface{}, len(m.formData))
+	for key, value := range m.formData {
+		copied[key] = value
+	}
+	return copied
+}
+
+// addRecord adds a new record and persists it when a database connection is available
 func (m *RecordsTableModel) addRecord() {
 	newRecord := &models.TemplateRecord{
-		ID:             int64(len(m.records) + 1),
 		NoteTemplateID: m.noteID,
-		RecordIndex:    len(m.records) + 1,
-		Data:           m.formData,
+		Data:           m.copyFormData(),
 		Status:         "draft",
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
 	}
+	if m.repeatFilter >= 0 {
+		newRecord.RepeatIndex = m.repeatFilter
+	}
+
+	if m.db != nil {
+		if err := database.CreateTemplateRecord(m.db, newRecord); err != nil {
+			m.err = err
+			return
+		}
+	} else {
+		newRecord.ID = int64(len(m.records) + 1)
+		newRecord.RecordIndex = len(m.records) + 1
+		newRecord.CreatedAt = time.Now()
+		newRecord.UpdatedAt = time.Now()
+	}
+
 	m.records = append(m.records, newRecord)
 	m.formData = make(map[string]interface{})
 }
 
 // updateRecord updates an existing record
 func (m *RecordsTableModel) updateRecord() {
-	if m.editingRecord != nil {
-		m.editingRecord.Data = m.formData
-		m.editingRecord.UpdatedAt = time.Now()
-		m.editingRecord = nil
+	if m.editingRecord == nil {
+		m.formData = make(map[string]interface{})
+		return
 	}
+
+	m.editingRecord.Data = m.copyFormData()
+	m.editingRecord.UpdatedAt = time.Now()
+
+	if m.db != nil {
+		if err := database.UpdateTemplateRecord(m.db, m.editingRecord); err != nil {
+			m.err = err
+			return
+		}
+	}
+
+	m.editingRecord = nil
 	m.formData = make(map[string]interface{})
 }
 
 // deleteRecord removes a record
 func (m *RecordsTableModel) deleteRecord(record *models.TemplateRecord) {
+	if m.db != nil {
+		if err := database.DeleteTemplateRecord(m.db, record.NoteTemplateID, record.RepeatIndex, record.RecordIndex); err != nil {
+			m.err = err
+			return
+		}
+	}
+
 	for i, r := range m.records {
-		if r.ID == record.ID {
+		if r.ID == record.ID && r.RecordIndex == record.RecordIndex {
 			m.records = append(m.records[:i], m.records[i+1:]...)
 			break
 		}
@@ -405,8 +573,10 @@ func (m RecordsTableModel) renderTableView() string {
 	var s strings.Builder
 
 	// Header
-	s.WriteString(TitleWithBorderStyle.Render("📊 Records Table"))
-	s.WriteString("\n\n")
+	if !m.embedded {
+		s.WriteString(TitleWithBorderStyle.Render("📊 Records"))
+		s.WriteString("\n\n")
+	}
 
 	// Filter info
 	if m.statusFilter != "all" || m.filter != "" {
@@ -462,8 +632,10 @@ func (m RecordsTableModel) renderTableView() string {
 	}
 
 	// Footer with help
-	s.WriteString("\n")
-	s.WriteString(m.renderHelp())
+	if !m.embedded {
+		s.WriteString("\n")
+		s.WriteString(m.renderHelp())
+	}
 
 	return s.String()
 }
@@ -558,6 +730,9 @@ func (m RecordsTableModel) renderFormView(title string) string {
 
 		value := m.formData[field.Name]
 		valueStr := fmt.Sprintf("%v", value)
+		if i == m.formCursor && field.Type != "boolean" {
+			valueStr += "█"
+		}
 
 		line := fmt.Sprintf("%s%s (%s): %s", field.Name, required, field.Type, valueStr)
 		s.WriteString(fieldStyle.Render(line))
@@ -577,9 +752,24 @@ func (m RecordsTableModel) renderFormView(title string) string {
 	s.WriteString("\n\n")
 
 	// Help
-	s.WriteString(HelpStyle.Render("↑/↓: navigate • enter: edit/submit • esc: cancel"))
+	help := "↑/↓: field • type to edit • j/k: enum • space: bool • enter: submit • esc: cancel"
+	if fieldHint := m.enumHelpHint(); fieldHint != "" {
+		help = fieldHint + " • " + help
+	}
+	s.WriteString(HelpStyle.Render(help))
 
 	return s.String()
+}
+
+func (m RecordsTableModel) enumHelpHint() string {
+	if m.recordSchema == nil || m.formCursor >= len(m.recordSchema.Fields) {
+		return ""
+	}
+	field := m.recordSchema.Fields[m.formCursor]
+	if field.Type == "enum" && len(field.Values) > 0 {
+		return fmt.Sprintf("enum values: %s", strings.Join(field.Values, ", "))
+	}
+	return ""
 }
 
 // renderDeleteView renders the delete confirmation dialog
@@ -657,7 +847,7 @@ func (m RecordsTableModel) renderHelp() string {
 
 // ShowRecordsTable launches the Bubble Tea TUI to display the records table
 func ShowRecordsTable(noteID int64, records []*models.TemplateRecord, schema *models.RecordSchema) error {
-	model := NewRecordsTableModel(noteID, records, schema)
+	model := NewRecordsTableModel(nil, noteID, records, schema)
 	p := tea.NewProgram(model)
 	_, err := p.Run()
 	return err

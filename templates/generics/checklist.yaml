@@ -1,0 +1,35 @@
+name: "Blank Checklist"
+version: "1.0.0"
+description: "A simple checklist of tasks without strict ordering between items"
+category: "generic"
+
+composition:
+  id: root
+  kind: procedure
+  title: Workflow
+  steps:
+    - id: main
+      kind: procedure
+      title: "Tasks"
+      description: "Work through these items in any order"
+      steps:
+        - id: tasks
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: checklist
+              title: "Task one"
+            - kind: checklist
+              title: "Task two"
+            - kind: checklist
+              title: "Task three"
+
+metadata:
+  tags:
+    - "generic"
+    - "checklist"
+  estimated_duration: "varies"
+  difficulty: "easy"
+
+notes: |
+  Edit checklist item titles in the YAML to match your note.

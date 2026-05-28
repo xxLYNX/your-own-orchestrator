@@ -1,0 +1,45 @@
+name: "Blank Procedure"
+version: "1.0.0"
+description: "A reusable procedure with ordered stages you define at note creation"
+category: "generic"
+
+composition:
+  id: root
+  kind: procedure
+  title: Workflow
+  steps:
+    - id: stage-1
+      kind: procedure
+      title: "Stage 1"
+      description: "Describe what happens in this stage"
+      steps:
+        - id: stage-1-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: checklist
+              title: "First task"
+            - kind: checklist
+              title: "Second task"
+
+    - id: stage-2
+      kind: procedure
+      title: "Stage 2"
+      description: "Add another stage or duplicate this block in YAML"
+      steps:
+        - id: stage-2-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: checklist
+              title: "Task for stage 2"
+
+metadata:
+  tags:
+    - "generic"
+    - "procedure"
+  estimated_duration: "varies"
+  difficulty: "easy"
+
+notes: |
+  Duplicate and edit stages in the YAML, or import and customize for your workflow.

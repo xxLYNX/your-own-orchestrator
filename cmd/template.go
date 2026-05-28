@@ -247,6 +247,7 @@ Example:
 			Version      string                   `yaml:"version"`
 			Description  string                   `yaml:"description"`
 			Category     string                   `yaml:"category"`
+			Composition  *models.ShapeNode        `yaml:"composition"`
 			Inputs       []models.TemplateInput   `yaml:"inputs"`
 			Steps        []models.TemplateStep    `yaml:"steps"`
 			Outputs      []models.TemplateOutput  `yaml:"outputs"`
@@ -276,6 +277,7 @@ Example:
 			Category:    templateDef.Category,
 			IsBuiltin:   false,
 			Definition: models.TemplateDefinition{
+				Composition:  templateDef.Composition,
 				Inputs:       templateDef.Inputs,
 				Steps:        templateDef.Steps,
 				Outputs:      templateDef.Outputs,
@@ -453,10 +455,18 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 			return fmt.Errorf("templates directory not found")
 		}
 
-		// Read all YAML files in templates directory
-		files, err := filepath.Glob(filepath.Join(templatesDir, "*.yaml"))
-		if err != nil {
-			return fmt.Errorf("failed to read templates directory: %w", err)
+		// Read all YAML files in templates directory (including generics/)
+		patterns := []string{
+			filepath.Join(templatesDir, "*.yaml"),
+			filepath.Join(templatesDir, "generics", "*.yaml"),
+		}
+		var files []string
+		for _, pattern := range patterns {
+			matches, err := filepath.Glob(pattern)
+			if err != nil {
+				return fmt.Errorf("failed to read templates directory: %w", err)
+			}
+			files = append(files, matches...)
 		}
 
 		loaded := 0
@@ -478,6 +488,7 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				Version      string                   `yaml:"version"`
 				Description  string                   `yaml:"description"`
 				Category     string                   `yaml:"category"`
+				Composition  *models.ShapeNode        `yaml:"composition"`
 				Inputs       []models.TemplateInput   `yaml:"inputs"`
 				Steps        []models.TemplateStep    `yaml:"steps"`
 				Outputs      []models.TemplateOutput  `yaml:"outputs"`
@@ -492,6 +503,10 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				continue
 			}
 
+			if templateDef.Version == "" {
+				templateDef.Version = "1.0.0"
+			}
+
 			template := &models.Template{
 				Name:        templateDef.Name,
 				Version:     templateDef.Version,
@@ -499,6 +514,7 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				Category:    templateDef.Category,
 				IsBuiltin:   true,
 				Definition: models.TemplateDefinition{
+					Composition:  templateDef.Composition,
 					Inputs:       templateDef.Inputs,
 					Steps:        templateDef.Steps,
 					Outputs:      templateDef.Outputs,
@@ -509,10 +525,31 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				},
 			}
 
-			// Check if already exists
+			if err := template.Definition.Validate(); err != nil {
+				fmt.Printf("⚠ Failed to validate %s: %v\n", template.Name, err)
+				continue
+			}
+
 			existing, _ := database.GetTemplateByName(db.Conn(), template.Name)
 			if existing != nil {
-				fmt.Printf("⊘ Template '%s' already exists, skipping\n", template.Name)
+				if !existing.IsBuiltin {
+					fmt.Printf("⊘ Template '%s' exists as a custom template, skipping\n", template.Name)
+					continue
+				}
+
+				template.ID = existing.ID
+				template.CreatedAt = existing.CreatedAt
+				if err := database.UpdateTemplate(db.Conn(), template); err != nil {
+					fmt.Printf("⚠ Failed to update %s: %v\n", template.Name, err)
+					continue
+				}
+
+				if existing.Version != template.Version {
+					fmt.Printf("✓ Updated built-in template: %s (v%s → v%s)\n", template.Name, existing.Version, template.Version)
+				} else {
+					fmt.Printf("✓ Refreshed built-in template: %s (v%s)\n", template.Name, template.Version)
+				}
+				loaded++
 				continue
 			}
 
@@ -522,11 +559,11 @@ var loadBuiltinTemplatesCmd = &cobra.Command{
 				continue
 			}
 
-			fmt.Printf("✓ Loaded built-in template: %s\n", template.Name)
+			fmt.Printf("✓ Loaded built-in template: %s (v%s)\n", template.Name, template.Version)
 			loaded++
 		}
 
-		fmt.Printf("\nLoaded %d built-in template(s)\n", loaded)
+		fmt.Printf("\nSynced %d built-in template(s)\n", loaded)
 
 		return nil
 	},
