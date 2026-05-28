@@ -118,7 +118,7 @@ func GetShapeState(db *sql.DB, noteTemplateID int64, shapePath string, repeatInd
 
 	state := &models.ShapeState{}
 	var dataJSON string
-	var completedAt sql.NullString
+	var completedAt, notes sql.NullString
 	var createdAt, updatedAt time.Time
 
 	err := db.QueryRow(query, noteTemplateID, shapePath, repeatIndex).Scan(
@@ -130,7 +130,7 @@ func GetShapeState(db *sql.DB, noteTemplateID int64, shapePath string, repeatInd
 		&state.Title,
 		&state.Completed,
 		&completedAt,
-		&state.Notes,
+		&notes,
 		&dataJSON,
 		&createdAt,
 		&updatedAt,
@@ -144,6 +144,9 @@ func GetShapeState(db *sql.DB, noteTemplateID int64, shapePath string, repeatInd
 
 	if completedAt.Valid {
 		state.CompletedAt = &completedAt.String
+	}
+	if notes.Valid {
+		state.Notes = notes.String
 	}
 	state.CreatedAt = createdAt.Format(time.RFC3339)
 	state.UpdatedAt = updatedAt.Format(time.RFC3339)
@@ -214,7 +217,7 @@ func scanShapeStates(rows *sql.Rows) ([]*models.ShapeState, error) {
 	for rows.Next() {
 		state := &models.ShapeState{}
 		var dataJSON string
-		var completedAt sql.NullString
+		var completedAt, notes sql.NullString
 		var createdAt, updatedAt time.Time
 
 		if err := rows.Scan(
@@ -226,7 +229,7 @@ func scanShapeStates(rows *sql.Rows) ([]*models.ShapeState, error) {
 			&state.Title,
 			&state.Completed,
 			&completedAt,
-			&state.Notes,
+			&notes,
 			&dataJSON,
 			&createdAt,
 			&updatedAt,
@@ -235,6 +238,9 @@ func scanShapeStates(rows *sql.Rows) ([]*models.ShapeState, error) {
 		}
 		if completedAt.Valid {
 			state.CompletedAt = &completedAt.String
+		}
+		if notes.Valid {
+			state.Notes = notes.String
 		}
 		state.CreatedAt = createdAt.Format(time.RFC3339)
 		state.UpdatedAt = updatedAt.Format(time.RFC3339)
