@@ -66,18 +66,6 @@ func NewArtifactsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, templ
 	}, nil
 }
 
-// ShowArtifacts launches the Bubble Tea TUI to display the artifacts view
-func ShowArtifacts(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template) error {
-	model, err := NewArtifactsViewModel(db, noteID, noteTemplateID, template)
-	if err != nil {
-		return err
-	}
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	_, err = p.Run()
-	return err
-}
-
 // IsCapturingInput reports whether keyboard input should go to this view exclusively.
 func (m *ArtifactsViewModel) IsCapturingInput() bool {
 	return m.viewMode != "list"

@@ -3,7 +3,7 @@ version: "1.0.0"
 description: "A reusable procedure with ordered stages you define at note creation"
 category: "generic"
 
-composition:
+structure:
   id: root
   kind: procedure
   title: Workflow

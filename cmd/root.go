@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"yoo/internal/config"
-	"yoo/internal/database"
-	"yoo/internal/tui"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,21 +21,7 @@ var rootCmd = &cobra.Command{
 It helps you keep track of your daily to-dos, tasks, reminders, and actions
 with a clean TUI interface backed by SQLite for local storage.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		targetDate := time.Now()
-
-		dbPath := config.GetDatabasePath()
-		db, err := database.New(dbPath)
-		if err != nil {
-			return fmt.Errorf("failed to initialize database: %w", err)
-		}
-		defer db.Close()
-
-		notes, err := database.GetNotesByDate(db.Conn(), targetDate)
-		if err != nil {
-			return fmt.Errorf("failed to query notes: %w", err)
-		}
-
-		return tui.ShowSchedule(db.Conn(), notes, targetDate)
+		return runSchedule(time.Now())
 	},
 }
 

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
 	"yoo/internal/database"
 	"yoo/internal/models"
@@ -18,7 +17,7 @@ type StepsViewModel struct {
 	db             *sql.DB
 	noteID         int64
 	noteTemplateID int64
-	steps          []*models.StepInstance
+	steps          []*models.ShapeState
 	template       *models.Template
 	cursor         int
 	showingDetails bool
@@ -28,7 +27,7 @@ type StepsViewModel struct {
 	height         int
 	embedded       bool
 	scopePath      []string
-	repeatIndex    int
+	repeatStack   models.RepeatStack
 	scopeNode      *models.ShapeNode
 	checklistNode  *models.ShapeNode
 	shapeState     *models.ShapeState
@@ -40,9 +39,9 @@ type StepsViewModel struct {
 
 // NewStepsViewModel creates a new steps view model
 func NewStepsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template) (*StepsViewModel, error) {
-	steps, err := database.ListNoteSteps(db, noteTemplateID)
+	steps, err := database.ListTopLevelProcedureStates(db, noteTemplateID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load steps: %w", err)
+		return nil, fmt.Errorf("failed to load procedure states: %w", err)
 	}
 
 	return &StepsViewModel{
@@ -60,27 +59,15 @@ func NewStepsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, template 
 	}, nil
 }
 
-// ShowSteps launches the Bubble Tea TUI to display the steps checklist
-func ShowSteps(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template) error {
-	model, err := NewStepsViewModel(db, noteID, noteTemplateID, template)
-	if err != nil {
-		return err
-	}
-
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	_, err = p.Run()
-	return err
-}
-
 // IsCapturingInput reports whether keyboard input should go to this view exclusively.
 func (m *StepsViewModel) IsCapturingInput() bool {
 	return m.addingNote || m.showingDetails
 }
 
-// SetScope loads checklist or step state for the current composition node.
-func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.ShapeNode) error {
+// SetScope loads checklist or step state for the current structure node.
+func (m *StepsViewModel) SetScope(path []string, stack models.RepeatStack, node *models.ShapeNode) error {
 	m.scopePath = append([]string{}, path...)
-	m.repeatIndex = repeatIndex
+	m.repeatStack = stack
 	m.scopeNode = node
 	m.useShapeState = false
 	m.checklistItems = nil
@@ -89,7 +76,7 @@ func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.S
 	m.cursor = 0
 
 	if node == nil {
-		steps, err := database.ListNoteSteps(m.db, m.noteTemplateID)
+		steps, err := database.ListTopLevelProcedureStates(m.db, m.noteTemplateID)
 		if err != nil {
 			return err
 		}
@@ -97,18 +84,18 @@ func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.S
 		return nil
 	}
 
-	comp, err := m.template.Definition.GetComposition()
+	structure, err := m.template.Definition.GetStructure()
 	if err != nil {
 		return err
 	}
 
 	if checklist := node.ChecklistForScope(); checklist != nil {
-		ids := comp.PathTo(checklist.ID)
+		ids := structure.PathTo(checklist.ID)
 		if len(ids) == 0 {
-			return fmt.Errorf("checklist not found in composition tree")
+			return fmt.Errorf("checklist not found in structure tree")
 		}
 		shapePath := models.ShapePath(ids)
-		state, err := database.GetShapeState(m.db, m.noteTemplateID, shapePath, repeatIndex)
+		state, err := database.GetShapeState(m.db, m.noteTemplateID, shapePath, stack)
 		if err != nil {
 			return err
 		}
@@ -122,7 +109,7 @@ func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.S
 		return nil
 	}
 
-	steps, err := database.ListNoteSteps(m.db, m.noteTemplateID)
+	steps, err := database.ListProcedureStatesForScope(m.db, m.noteTemplateID, stack, path)
 	if err != nil {
 		return err
 	}
@@ -225,13 +212,12 @@ func (m StepsViewModel) handleNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.noteInput = ""
 
 	case "enter":
-		// Save the note
 		if len(m.steps) > 0 && m.cursor < len(m.steps) {
-			step := m.steps[m.cursor]
-			if err := database.UpdateStepNotes(m.db, m.noteTemplateID, step.StepNumber, m.noteInput); err != nil {
+			state := m.steps[m.cursor]
+			if err := database.UpdateShapeNotes(m.db, state, m.noteInput); err != nil {
 				m.err = err
 			} else {
-				step.Notes = m.noteInput
+				state.Notes = m.noteInput
 			}
 		}
 		m.addingNote = false
@@ -332,26 +318,9 @@ func (m StepsViewModel) HasChecklist() bool {
 	return m.rowCount() > 0
 }
 
-// toggleStepCompletion toggles the completion status of a step
-func (m *StepsViewModel) toggleStepCompletion(step *models.StepInstance) error {
-	if step.Completed {
-		// Uncomplete the step
-		if err := database.UncompleteStep(m.db, m.noteTemplateID, step.StepNumber); err != nil {
-			return err
-		}
-		step.Completed = false
-		step.CompletedAt = nil
-	} else {
-		// Complete the step
-		if err := database.CompleteStep(m.db, m.noteTemplateID, step.StepNumber); err != nil {
-			return err
-		}
-		step.Completed = true
-		now := time.Now()
-		step.CompletedAt = &now
-	}
-
-	return nil
+// toggleStepCompletion toggles the completion status of a procedure shape state.
+func (m *StepsViewModel) toggleStepCompletion(state *models.ShapeState) error {
+	return database.ToggleShapeComplete(m.db, state, !state.Completed)
 }
 
 // View renders the TUI
@@ -426,8 +395,8 @@ func (m StepsViewModel) renderProgressBar() string {
 			}
 		}
 	} else {
-		for _, step := range m.steps {
-			if step.Completed {
+		for _, state := range m.steps {
+			if state.Completed {
 				completedCount++
 			}
 		}
@@ -505,20 +474,20 @@ func (m StepsViewModel) renderStepsList() string {
 		return s.String()
 	}
 
-	for i, step := range m.steps {
+	for i, state := range m.steps {
 		cursor := "  "
 		if i == m.cursor {
 			cursor = Cursor() + " "
 		}
 
-		checkbox := Checkbox(step.Completed)
+		checkbox := Checkbox(state.Completed)
 
 		stepNum := lipgloss.NewStyle().
 			Foreground(ColorSubtle).
-			Render(fmt.Sprintf("%d.", step.StepNumber))
+			Render(fmt.Sprintf("%d.", i+1))
 
 		var titleStyle lipgloss.Style
-		if step.Completed {
+		if state.Completed {
 			titleStyle = ListItemCompletedStyle
 		} else if i == m.cursor {
 			titleStyle = lipgloss.NewStyle().
@@ -528,27 +497,27 @@ func (m StepsViewModel) renderStepsList() string {
 			titleStyle = ListItemStyle
 		}
 
-		title := titleStyle.Render(step.Title)
+		title := titleStyle.Render(state.Title)
 
 		dateStr := ""
-		if step.Completed && step.CompletedAt != nil {
+		if state.Completed && state.CompletedAt != nil {
 			dateStr = lipgloss.NewStyle().
 				Foreground(ColorSuccess).
-				Render(fmt.Sprintf("  ✓ Completed %s", step.CompletedAt.Format("2006-01-02")))
+				Render(fmt.Sprintf("  ✓ Completed %s", *state.CompletedAt))
 		}
 
 		line := fmt.Sprintf("%s%s %s %s%s", cursor, checkbox, stepNum, title, dateStr)
 
 		if i == m.cursor {
 			plainCheck := "☐"
-			if step.Completed {
+			if state.Completed {
 				plainCheck = "☑"
 			}
 			plainDate := ""
-			if step.Completed && step.CompletedAt != nil {
-				plainDate = fmt.Sprintf("  ✓ Completed %s", step.CompletedAt.Format("2006-01-02"))
+			if state.Completed && state.CompletedAt != nil {
+				plainDate = fmt.Sprintf("  ✓ Completed %s", *state.CompletedAt)
 			}
-			plainLine := fmt.Sprintf("> %s %d. %s%s", plainCheck, step.StepNumber, step.Title, plainDate)
+			plainLine := fmt.Sprintf("> %s %d. %s%s", plainCheck, i+1, state.Title, plainDate)
 
 			pad := ""
 			if m.width > 2 {
@@ -595,18 +564,18 @@ func (m StepsViewModel) renderCompactStepPreview() string {
 		return ""
 	}
 
-	step := m.steps[m.cursor]
+	state := m.steps[m.cursor]
 	var s strings.Builder
 
-	header := SectionHeaderStyle.Render(fmt.Sprintf("Selected: %d. %s", step.StepNumber, step.Title))
+	header := SectionHeaderStyle.Render(fmt.Sprintf("Selected: %d. %s", m.cursor+1, state.Title))
 	s.WriteString(header)
 	s.WriteString("\n")
 
-	if step.Description != "" {
+	if node := m.nodeForState(state); node != nil && node.Description != "" {
 		desc := lipgloss.NewStyle().
 			Foreground(ColorSubtle).
 			Italic(true).
-			Render(step.Description)
+			Render(node.Description)
 		s.WriteString(desc)
 		s.WriteString("\n")
 	}
@@ -615,219 +584,136 @@ func (m StepsViewModel) renderCompactStepPreview() string {
 	return s.String()
 }
 
-// renderSelectedStepPreview renders a preview of the selected step
+func (m *StepsViewModel) nodeForState(state *models.ShapeState) *models.ShapeNode {
+	if state == nil {
+		return nil
+	}
+	comp, err := m.template.Definition.GetStructure()
+	if err != nil || comp == nil {
+		return nil
+	}
+	return comp.FindByPath(strings.Split(state.ShapePath, "."))
+}
+
+// renderSelectedStepPreview renders a preview of the selected procedure state.
 func (m StepsViewModel) renderSelectedStepPreview() string {
 	if len(m.steps) == 0 || m.cursor >= len(m.steps) {
 		return ""
 	}
 
-	step := m.steps[m.cursor]
-	templateStep := m.getTemplateStep(step.StepNumber)
-
+	state := m.steps[m.cursor]
+	node := m.nodeForState(state)
 	var s strings.Builder
 
-	// Section header
-	header := SectionHeaderStyle.Render(fmt.Sprintf("Selected: %d. %s", step.StepNumber, step.Title))
+	header := SectionHeaderStyle.Render(fmt.Sprintf("Selected: %d. %s", m.cursor+1, state.Title))
 	s.WriteString(header)
 	s.WriteString("\n")
 
-	// Description
-	if step.Description != "" {
-		desc := lipgloss.NewStyle().
-			Foreground(ColorSubtle).
-			Italic(true).
-			Render(step.Description)
+	if node != nil && node.Description != "" {
+		desc := lipgloss.NewStyle().Foreground(ColorSubtle).Italic(true).Render(node.Description)
 		s.WriteString(desc)
 		s.WriteString("\n")
 	}
 
-	// Checklist items
-	if templateStep != nil && len(templateStep.Checklist) > 0 {
+	if node != nil && node.EstimatedTime != "" {
 		s.WriteString("\n")
-		checklistLabel := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(ColorSecondary).
-			Render("Checklist:")
-		s.WriteString(checklistLabel)
-		s.WriteString("\n")
-
-		for _, item := range templateStep.Checklist {
-			checkbox := lipgloss.NewStyle().Foreground(ColorMuted).Render("☐")
-			itemText := lipgloss.NewStyle().Foreground(ColorSubtle).Render(item)
-			s.WriteString(fmt.Sprintf("  %s %s\n", checkbox, itemText))
-		}
-	}
-
-	// Estimated time
-	if templateStep != nil && templateStep.EstimatedTime != "" {
-		s.WriteString("\n")
-		timeLabel := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(ColorInfo).
-			Render("Estimated:")
-		s.WriteString(timeLabel)
-		s.WriteString(" ")
-		s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(templateStep.EstimatedTime))
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorInfo).Render("Estimated: "))
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(node.EstimatedTime))
 		s.WriteString("\n")
 	}
 
-	// Notes
-	if step.Notes != "" {
+	if state.Notes != "" {
 		s.WriteString("\n")
-		notesLabel := lipgloss.NewStyle().
-			Bold(true).
-			Foreground(ColorWarning).
-			Render("Notes:")
-		s.WriteString(notesLabel)
+		s.WriteString(lipgloss.NewStyle().Bold(true).Foreground(ColorWarning).Render("Notes:"))
 		s.WriteString("\n")
-		noteText := lipgloss.NewStyle().
-			Foreground(ColorSubtle).
-			Italic(true).
-			PaddingLeft(2).
-			Render(step.Notes)
-		s.WriteString(noteText)
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Italic(true).PaddingLeft(2).Render(state.Notes))
 		s.WriteString("\n")
 	}
 
-	// Wrap in a panel
-	panel := PanelStyle.Width(m.width - 4).Render(s.String())
-	return panel
+	return PanelStyle.Width(m.width - 4).Render(s.String())
 }
 
-// renderDetailedView renders the detailed view of the selected step
+// renderDetailedView renders the detailed view of the selected procedure state.
 func (m StepsViewModel) renderDetailedView() string {
 	if len(m.steps) == 0 || m.cursor >= len(m.steps) {
 		return EmptyState("No step selected")
 	}
 
-	step := m.steps[m.cursor]
-	templateStep := m.getTemplateStep(step.StepNumber)
-
+	state := m.steps[m.cursor]
+	node := m.nodeForState(state)
 	var s strings.Builder
 
-	// Title
-	title := TitleStyle.Render(fmt.Sprintf("Step %d: %s", step.StepNumber, step.Title))
+	title := TitleStyle.Render(fmt.Sprintf("Step %d: %s", m.cursor+1, state.Title))
 	s.WriteString(title)
 	s.WriteString("\n\n")
 
-	// Status
 	status := "Pending"
-	if step.Completed {
+	if state.Completed {
 		status = "Completed"
 	}
-	statusBadge := StatusBadge(status)
-	s.WriteString(statusBadge)
+	s.WriteString(StatusBadge(status))
 	s.WriteString("\n\n")
 
-	// Description
-	if step.Description != "" {
-		descLabel := SectionHeaderStyle.Render("Description")
-		s.WriteString(descLabel)
+	if node != nil && node.Description != "" {
+		s.WriteString(SectionHeaderStyle.Render("Description"))
 		s.WriteString("\n")
-		desc := lipgloss.NewStyle().
-			Foreground(ColorForeground).
-			Render(step.Description)
-		s.WriteString(desc)
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorForeground).Render(node.Description))
 		s.WriteString("\n\n")
 	}
 
-	// Checklist
-	if templateStep != nil && len(templateStep.Checklist) > 0 {
-		checklistLabel := SectionHeaderStyle.Render("Checklist Items")
-		s.WriteString(checklistLabel)
+	if node != nil && node.EstimatedTime != "" {
+		s.WriteString(SectionHeaderStyle.Render("Estimated Time"))
 		s.WriteString("\n")
-
-		for _, item := range templateStep.Checklist {
-			checkbox := lipgloss.NewStyle().Foreground(ColorMuted).Render("☐")
-			itemText := lipgloss.NewStyle().Foreground(ColorForeground).Render(item)
-			s.WriteString(fmt.Sprintf("  %s %s\n", checkbox, itemText))
-		}
-		s.WriteString("\n")
-	}
-
-	// Estimated time
-	if templateStep != nil && templateStep.EstimatedTime != "" {
-		timeLabel := SectionHeaderStyle.Render("Estimated Time")
-		s.WriteString(timeLabel)
-		s.WriteString("\n")
-		s.WriteString(TimeBadge(templateStep.EstimatedTime))
+		s.WriteString(TimeBadge(node.EstimatedTime))
 		s.WriteString("\n\n")
 	}
 
-	// Output required
-	if templateStep != nil && templateStep.OutputRequired != "" {
-		outputLabel := SectionHeaderStyle.Render("Output Required")
-		s.WriteString(outputLabel)
+	if node != nil && node.OutputRequired != "" {
+		s.WriteString(SectionHeaderStyle.Render("Output Required"))
 		s.WriteString("\n")
-		output := lipgloss.NewStyle().
-			Foreground(ColorWarning).
-			Bold(true).
-			Render("→ " + templateStep.OutputRequired)
-		s.WriteString(output)
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).Render("→ " + node.OutputRequired))
 		s.WriteString("\n\n")
 	}
 
-	// Notes
-	notesLabel := SectionHeaderStyle.Render("Notes")
-	s.WriteString(notesLabel)
+	s.WriteString(SectionHeaderStyle.Render("Notes"))
 	s.WriteString("\n")
-	if step.Notes != "" {
-		noteText := lipgloss.NewStyle().
-			Foreground(ColorSubtle).
-			Render(step.Notes)
-		s.WriteString(noteText)
+	if state.Notes != "" {
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(state.Notes))
 	} else {
-		emptyNote := lipgloss.NewStyle().
-			Foreground(ColorMuted).
-			Italic(true).
-			Render("(No notes yet. Press 'n' to add a note)")
-		s.WriteString(emptyNote)
+		s.WriteString(lipgloss.NewStyle().Foreground(ColorMuted).Italic(true).Render("(No notes yet. Press 'n' to add a note)"))
 	}
 	s.WriteString("\n\n")
 
-	// Completion date
-	if step.Completed && step.CompletedAt != nil {
-		completedLabel := SectionHeaderStyle.Render("Completed")
-		s.WriteString(completedLabel)
+	if state.Completed && state.CompletedAt != nil {
+		s.WriteString(SectionHeaderStyle.Render("Completed"))
 		s.WriteString("\n")
-		s.WriteString(DateBadge(step.CompletedAt.Format("January 2, 2006 at 15:04")))
+		s.WriteString(DateBadge(*state.CompletedAt))
 		s.WriteString("\n\n")
 	}
 
-	// Help
-	help := HelpWithBorderStyle.Render(
-		KeyBindings(
-			"v", "back to list",
-			"space", "toggle completion",
-			"n", "add/edit note",
-			"esc/q", "exit",
-		),
-	)
-	s.WriteString(help)
-
+	s.WriteString(HelpWithBorderStyle.Render(KeyBindings("v", "back to list", "space", "toggle completion", "n", "add/edit note", "esc/q", "exit")))
 	return s.String()
 }
 
-// renderNoteInput renders the note input view
+// renderNoteInput renders the note input view.
 func (m StepsViewModel) renderNoteInput() string {
 	if len(m.steps) == 0 || m.cursor >= len(m.steps) {
 		return EmptyState("No step selected")
 	}
 
-	step := m.steps[m.cursor]
+	state := m.steps[m.cursor]
 
 	var s strings.Builder
 
 	// Title
-	title := TitleStyle.Render(fmt.Sprintf("Add Note to Step %d", step.StepNumber))
+	title := TitleStyle.Render(fmt.Sprintf("Add Note to Step %d", m.cursor+1))
 	s.WriteString(title)
 	s.WriteString("\n\n")
 
-	// Step title
 	stepTitle := lipgloss.NewStyle().
 		Foreground(ColorSubtle).
 		Italic(true).
-		Render(step.Title)
+		Render(state.Title)
 	s.WriteString(stepTitle)
 	s.WriteString("\n\n")
 
@@ -876,19 +762,4 @@ func (m StepsViewModel) renderHelp() string {
 		),
 	)
 	return help
-}
-
-// getTemplateStep retrieves the template step definition for a step number
-func (m StepsViewModel) getTemplateStep(stepNumber int) *models.TemplateStep {
-	if m.template == nil {
-		return nil
-	}
-
-	for i := range m.template.Definition.Steps {
-		if m.template.Definition.Steps[i].ID == stepNumber {
-			return &m.template.Definition.Steps[i]
-		}
-	}
-
-	return nil
 }

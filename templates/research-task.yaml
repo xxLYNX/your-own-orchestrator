@@ -43,59 +43,108 @@ inputs:
     description: "Who will consume this research?"
     required: false
 
-# Procedural steps
-steps:
-  - id: 1
-    title: "Literature review"
-    description: "Identify and review existing knowledge on the topic"
-    checklist:
-      - "Define research scope and key questions"
-      - "Search academic databases and journals"
-      - "Review books and authoritative sources"
-      - "Scan blog posts and industry articles"
-      - "Identify key thought leaders and experts"
-      - "Note gaps in existing knowledge"
-    estimated_time: "2-4 hours"
+# Workflow structure
+structure:
+  id: root
+  kind: procedure
+  title: Workflow
+  steps:
+    - id: literature-review
+      kind: procedure
+      title: "Literature review"
+      description: "Identify and review existing knowledge on the topic"
+      estimated_time: "2-4 hours"
+      steps:
+        - id: literature-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Define research scope and key questions"
+            - kind: action
+              title: "Search academic databases and journals"
+            - kind: action
+              title: "Review books and authoritative sources"
+            - kind: action
+              title: "Scan blog posts and industry articles"
+            - kind: action
+              title: "Identify key thought leaders and experts"
+            - kind: action
+              title: "Note gaps in existing knowledge"
 
-  - id: 2
-    title: "Data collection"
-    description: "Gather primary and secondary data"
-    checklist:
-      - "Collect relevant statistics and data"
-      - "Conduct interviews if needed"
-      - "Survey or poll if appropriate"
-      - "Download papers and documents"
-      - "Bookmark and archive web sources"
-      - "Organize sources by theme"
-    estimated_time: "1-3 hours"
-    output_required: "sources_bibliography"
+    - id: data-collection
+      kind: procedure
+      title: "Data collection"
+      description: "Gather primary and secondary data"
+      estimated_time: "1-3 hours"
+      output_required: "sources_bibliography"
+      steps:
+        - id: data-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Collect relevant statistics and data"
+            - kind: action
+              title: "Conduct interviews if needed"
+            - kind: action
+              title: "Survey or poll if appropriate"
+            - kind: action
+              title: "Download papers and documents"
+            - kind: action
+              title: "Bookmark and archive web sources"
+            - kind: action
+              title: "Organize sources by theme"
 
-  - id: 3
-    title: "Analysis and synthesis"
-    description: "Analyze findings and identify patterns"
-    checklist:
-      - "Review all collected information"
-      - "Identify common themes and patterns"
-      - "Note contradictions or disagreements"
-      - "Evaluate source credibility"
-      - "Draw preliminary conclusions"
-      - "Identify areas needing more research"
-    estimated_time: "2-4 hours"
-    output_required: "research_notes"
+    - id: analysis
+      kind: procedure
+      title: "Analysis and synthesis"
+      description: "Analyze findings and identify patterns"
+      estimated_time: "2-4 hours"
+      output_required: "research_notes"
+      steps:
+        - id: analysis-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Review all collected information"
+            - kind: action
+              title: "Identify common themes and patterns"
+            - kind: action
+              title: "Note contradictions or disagreements"
+            - kind: action
+              title: "Evaluate source credibility"
+            - kind: action
+              title: "Draw preliminary conclusions"
+            - kind: action
+              title: "Identify areas needing more research"
 
-  - id: 4
-    title: "Document findings"
-    description: "Write up research summary and conclusions"
-    checklist:
-      - "Create document outline"
-      - "Write executive summary"
-      - "Document key findings"
-      - "Include supporting evidence"
-      - "Add visualizations if helpful"
-      - "Write recommendations if applicable"
-      - "Proofread and edit"
-    estimated_time: "1-3 hours"
-    output_required: "summary_document"
+    - id: document
+      kind: procedure
+      title: "Document findings"
+      description: "Write up research summary and conclusions"
+      estimated_time: "1-3 hours"
+      output_required: "summary_document"
+      steps:
+        - id: document-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Create document outline"
+            - kind: action
+              title: "Write executive summary"
+            - kind: action
+              title: "Document key findings"
+            - kind: action
+              title: "Include supporting evidence"
+            - kind: action
+              title: "Add visualizations if helpful"
+            - kind: action
+              title: "Write recommendations if applicable"
+            - kind: action
+              title: "Proofread and edit"
 
 # Expected outputs
 outputs:

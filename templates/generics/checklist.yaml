@@ -3,7 +3,7 @@ version: "1.0.0"
 description: "A simple checklist of tasks without strict ordering between items"
 category: "generic"
 
-composition:
+structure:
   id: root
   kind: procedure
   title: Workflow

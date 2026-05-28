@@ -4,10 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"yoo/internal/config"
-	"yoo/internal/database"
-	"yoo/internal/tui"
-
 	"github.com/spf13/cobra"
 )
 
@@ -33,26 +29,7 @@ var scheduleCmd = &cobra.Command{
 			}
 		}
 
-		// Initialize database
-		dbPath := config.GetDatabasePath()
-		db, err := database.New(dbPath)
-		if err != nil {
-			return fmt.Errorf("failed to initialize database: %w", err)
-		}
-		defer db.Close()
-
-		// Query notes for the target date
-		notes, err := database.GetNotesByDate(db.Conn(), targetDate)
-		if err != nil {
-			return fmt.Errorf("failed to query notes: %w", err)
-		}
-
-		// Launch TUI
-		if err := tui.ShowSchedule(db.Conn(), notes, targetDate); err != nil {
-			return fmt.Errorf("failed to display schedule: %w", err)
-		}
-
-		return nil
+		return runSchedule(targetDate)
 	},
 }
 

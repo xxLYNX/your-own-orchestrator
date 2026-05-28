@@ -147,6 +147,18 @@ func (m ScheduleModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case " ":
+		if len(m.notes) > 0 && m.cursor < len(m.notes) {
+			note := m.notes[m.cursor]
+			if note.IsTemplated {
+				detail, err := NewOrchestratorModel(m.db, note.ID)
+				if err != nil {
+					m.err = err
+					return m, nil
+				}
+				m.detail = detail
+				return m, nil
+			}
+		}
 		return m.toggleNoteCompletion()
 
 	case "d":
@@ -286,7 +298,11 @@ func (m ScheduleModel) renderNoteLine(index int, note *database.Note) string {
 	title := note.Title
 	if note.IsTemplated {
 		progress := int(note.TemplateProgress * 100)
-		title = fmt.Sprintf("%s  template %d%%", note.Title, progress)
+		marker := ">"
+		if progress >= 100 {
+			marker = "☑"
+		}
+		title = fmt.Sprintf("%s  %s structured %d%%", note.Title, marker, progress)
 	}
 
 	line := fmt.Sprintf("%s %s %s", cursor, checkbox, title)

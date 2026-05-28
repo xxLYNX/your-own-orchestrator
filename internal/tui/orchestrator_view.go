@@ -12,13 +12,13 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// OrchestratorModel navigates the fractal composition tree for a templated note.
+// OrchestratorModel navigates the fractal structure tree for a templated note.
 type OrchestratorModel struct {
 	noteID         int64
 	note           *database.Note
 	noteTemplate   *models.NoteTemplate
 	template       *models.Template
-	composition    *models.ShapeNode
+	structure      *models.ShapeNode
 	inputs         map[string]interface{}
 	navStack       []models.NavContext
 	cursor         int
@@ -29,7 +29,6 @@ type OrchestratorModel struct {
 	focusChecklist bool
 	db             *sql.DB
 	width, height  int
-	standalone     bool
 	done           bool
 	err            error
 	quitting       bool
@@ -37,10 +36,6 @@ type OrchestratorModel struct {
 
 // NewOrchestratorModel creates a tree navigator for a templated note.
 func NewOrchestratorModel(db *sql.DB, noteID int64) (*OrchestratorModel, error) {
-	return newOrchestratorModel(db, noteID, false)
-}
-
-func newOrchestratorModel(db *sql.DB, noteID int64, standalone bool) (*OrchestratorModel, error) {
 	note, err := database.GetNoteByID(db, noteID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load note: %w", err)
@@ -59,7 +54,7 @@ func newOrchestratorModel(db *sql.DB, noteID int64, standalone bool) (*Orchestra
 		return nil, fmt.Errorf("failed to load template: %w", err)
 	}
 
-	comp, err := template.Definition.GetComposition()
+	comp, err := template.Definition.GetStructure()
 	if err != nil {
 		return nil, err
 	}
@@ -69,11 +64,10 @@ func newOrchestratorModel(db *sql.DB, noteID int64, standalone bool) (*Orchestra
 		note:         note,
 		noteTemplate: noteTemplate,
 		template:     template,
-		composition:  comp,
+		structure:    comp,
 		inputs:       noteTemplate.TemplateData.Inputs,
 		navStack:     []models.NavContext{{Path: []string{comp.ID}}},
 		db:           db,
-		standalone:   standalone,
 		width:        80,
 		height:       24,
 	}
@@ -85,19 +79,19 @@ func newOrchestratorModel(db *sql.DB, noteID int64, standalone bool) (*Orchestra
 }
 
 func (m *OrchestratorModel) initChildPanels() error {
-	if logNode := m.composition.FindFirstLogNode(); logNode != nil {
-		records, err := database.ListTemplateRecords(m.db, m.noteTemplate.ID, -1)
+	if logNode := m.structure.FindFirstLogNode(); logNode != nil {
+		records, err := database.ListTemplateRecords(m.db, m.noteTemplate.ID, nil)
 		if err != nil {
 			return err
 		}
 		rm := NewRecordsTableModel(m.db, m.noteTemplate.ID, records, logNode.RecordSchema)
 		rm.SetEmbedded(true)
-		rm.SetRepeatFilter(-1)
+		rm.SetRepeatFilter(nil)
 		m.recordsModel = &rm
 	}
 
 	if m.template.Definition.HasProcedureShape() {
-		if err := database.BackfillShapeStatesIfMissing(m.db, m.noteTemplate.ID, m.template, m.inputs); err != nil {
+		if err := database.EnsureShapeStates(m.db, m.noteTemplate.ID, m.template, m.inputs); err != nil {
 			return err
 		}
 		stepsModel, err := NewStepsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template)
@@ -105,7 +99,7 @@ func (m *OrchestratorModel) initChildPanels() error {
 			return err
 		}
 		stepsModel.SetEmbedded(true)
-		if err := stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatIndex, m.currentNode()); err != nil {
+		if err := stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatStack, m.currentNode()); err != nil {
 			return err
 		}
 		m.stepsModel = stepsModel
@@ -123,26 +117,15 @@ func (m *OrchestratorModel) initChildPanels() error {
 	return nil
 }
 
-// ShowTemplatedNote launches a standalone orchestrator session.
-func ShowTemplatedNote(db *sql.DB, noteID int64) error {
-	model, err := newOrchestratorModel(db, noteID, true)
-	if err != nil {
-		return err
-	}
-	p := tea.NewProgram(model, tea.WithAltScreen())
-	_, err = p.Run()
-	return err
-}
-
 func (m *OrchestratorModel) currentNav() models.NavContext {
 	if len(m.navStack) == 0 {
-		return models.NavContext{Path: []string{m.composition.ID}}
+		return models.NavContext{Path: []string{m.structure.ID}}
 	}
 	return m.navStack[len(m.navStack)-1]
 }
 
 func (m *OrchestratorModel) currentNode() *models.ShapeNode {
-	return m.composition.FindByPath(m.currentNav().Path)
+	return m.structure.FindByPath(m.currentNav().Path)
 }
 
 func (m *OrchestratorModel) Init() tea.Cmd {
@@ -340,10 +323,6 @@ func (m *OrchestratorModel) persistProgress() error {
 }
 
 func (m *OrchestratorModel) requestExit() (tea.Model, tea.Cmd) {
-	if m.standalone {
-		m.quitting = true
-		return m, tea.Quit
-	}
 	m.done = true
 	return m, nil
 }
@@ -353,8 +332,8 @@ func (m *OrchestratorModel) listCount() int {
 	if node == nil {
 		return 0
 	}
-	if node.Kind == models.ShapeRepeat {
-		return node.ResolveRepeatCount(m.inputs)
+	if models.NeedsRepeatPicker(node, m.currentNav().RepeatStack, m.inputs) {
+		return node.EffectiveRepeatCount(m.inputs)
 	}
 	return len(node.NavigableChildren())
 }
@@ -362,6 +341,26 @@ func (m *OrchestratorModel) listCount() int {
 func (m *OrchestratorModel) drillIntoSelection() {
 	node := m.currentNode()
 	if node == nil {
+		return
+	}
+
+	nav := m.currentNav()
+
+	if models.NeedsRepeatPicker(node, nav.RepeatStack, m.inputs) {
+		count := node.EffectiveRepeatCount(m.inputs)
+		if m.cursor < 0 || m.cursor >= count {
+			return
+		}
+		newStack := nav.RepeatStack.WithFrame(node.ID, m.cursor+1)
+		if err := database.EnsureRepeatScope(m.db, m.noteTemplate.ID, m.structure, node, newStack, m.inputs); err != nil {
+			m.err = err
+			return
+		}
+		m.navStack = append(m.navStack, models.NavContext{
+			Path:        append(append([]string{}, nav.Path...), node.ID),
+			RepeatStack: newStack,
+		})
+		m.cursor = 0
 		return
 	}
 
@@ -376,22 +375,6 @@ func (m *OrchestratorModel) drillIntoSelection() {
 	case models.ShapeArtifact:
 		m.panelMode = "artifacts"
 		return
-	case models.ShapeRepeat:
-		count := node.ResolveRepeatCount(m.inputs)
-		if m.cursor < 0 || m.cursor >= count || node.RepeatBody == nil {
-			return
-		}
-		if err := database.EnsureRepeatScope(m.db, m.noteTemplate.ID, m.composition, node, m.cursor+1, m.inputs); err != nil {
-			m.err = err
-			return
-		}
-		nav := m.currentNav()
-		m.navStack = append(m.navStack, models.NavContext{
-			Path:        append(append([]string{}, nav.Path...), node.RepeatBody.ID),
-			RepeatIndex: m.cursor + 1,
-		})
-		m.cursor = 0
-		return
 	}
 
 	children := node.NavigableChildren()
@@ -399,19 +382,19 @@ func (m *OrchestratorModel) drillIntoSelection() {
 		return
 	}
 	child := children[m.cursor]
-	nav := m.currentNav()
 	m.navStack = append(m.navStack, models.NavContext{
-		Path: append(append([]string{}, nav.Path...), child.ID),
+		Path:        append(append([]string{}, nav.Path...), child.ID),
+		RepeatStack: append(models.RepeatStack(nil), nav.RepeatStack...),
 	})
 	m.cursor = 0
 }
 
-func (m *OrchestratorModel) recordRepeatScope() int {
-	nav := m.currentNav()
-	if nav.RepeatIndex > 0 {
-		return nav.RepeatIndex
+func (m *OrchestratorModel) recordRepeatScope() models.RepeatStack {
+	stack := m.currentNav().RepeatStack
+	if len(stack) == 0 {
+		return nil
 	}
-	return -1
+	return stack
 }
 
 func (m *OrchestratorModel) refreshRecords() error {
@@ -420,9 +403,9 @@ func (m *OrchestratorModel) refreshRecords() error {
 	}
 
 	scope := m.recordRepeatScope()
-	logNode := m.composition.FindFirstLogNode()
+	logNode := m.structure.FindFirstLogNode()
 	if node := m.currentNode(); node != nil {
-		if scoped := node.FindLogNodeInSubtree(); scoped != nil {
+		if scoped := node.FindFirstLogNode(); scoped != nil {
 			logNode = scoped
 		}
 	}
@@ -445,7 +428,7 @@ func (m *OrchestratorModel) refreshStepsScope() error {
 	if m.stepsModel == nil {
 		return nil
 	}
-	return m.stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatIndex, m.currentNode())
+	return m.stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatStack, m.currentNode())
 }
 
 func (m *OrchestratorModel) View() string {
@@ -487,7 +470,7 @@ func (m *OrchestratorModel) renderHeader() string {
 	var s strings.Builder
 	s.WriteString(TitleStyle.Render(m.note.Title))
 	s.WriteString("\n")
-	shapes := strings.Join(m.composition.ActiveShapeKinds(), " + ")
+	shapes := strings.Join(m.structure.ActiveShapeKinds(), " + ")
 	meta := fmt.Sprintf("Template: %s v%s  •  shapes: %s", m.template.Name, m.template.Version, shapes)
 	s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(meta))
 	s.WriteString("\n")
@@ -523,8 +506,8 @@ func (m *OrchestratorModel) renderTreeList() string {
 	s.WriteString(title)
 	s.WriteString("\n\n")
 
-	if node.Kind == models.ShapeRepeat {
-		count := node.ResolveRepeatCount(m.inputs)
+	if models.NeedsRepeatPicker(node, m.currentNav().RepeatStack, m.inputs) {
+		count := node.EffectiveRepeatCount(m.inputs)
 		if count == 0 {
 			s.WriteString(WarningMessageStyle.Render("Set repeat count via template inputs (e.g. target_count)."))
 			s.WriteString("\n")

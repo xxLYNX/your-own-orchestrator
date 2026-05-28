@@ -138,39 +138,3 @@ func DeleteArtifact(conn *sql.DB, noteTemplateID int64, name string) error {
 
 	return nil
 }
-
-// UpdateArtifact updates an existing artifact
-func UpdateArtifact(conn *sql.DB, artifact *models.Artifact) error {
-	query := `
-		UPDATE artifacts
-		SET artifact_type = ?, type = ?, value = ?, description = ?, required = ?, updated_at = ?
-		WHERE note_template_id = ? AND name = ?
-	`
-
-	now := time.Now()
-	result, err := conn.Exec(query,
-		artifact.ArtifactType,
-		artifact.Type,
-		artifact.Value,
-		artifact.Description,
-		artifact.Required,
-		now,
-		artifact.NoteTemplateID,
-		artifact.Name,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update artifact: %w", err)
-	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("artifact '%s' not found", artifact.Name)
-	}
-
-	artifact.UpdatedAt = now
-	return nil
-}

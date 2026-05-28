@@ -127,45 +127,6 @@ func GetNotesByDate(db *sql.DB, date time.Time) ([]*Note, error) {
 	return notes, rows.Err()
 }
 
-// GetNotesByDateRange retrieves all notes within a date range
-func GetNotesByDateRange(db *sql.DB, startDate, endDate time.Time) ([]*Note, error) {
-	query := `
-		SELECT id, title, description, scheduled_at, status, priority, is_templated, template_progress, created_at, updated_at
-		FROM notes
-		WHERE scheduled_at >= ? AND scheduled_at < ?
-		ORDER BY scheduled_at ASC
-	`
-
-	rows, err := db.Query(query, startDate, endDate)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var notes []*Note
-	for rows.Next() {
-		note := &Note{}
-		err := rows.Scan(
-			&note.ID,
-			&note.Title,
-			&note.Description,
-			&note.ScheduledAt,
-			&note.Status,
-			&note.Priority,
-			&note.IsTemplated,
-			&note.TemplateProgress,
-			&note.CreatedAt,
-			&note.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		notes = append(notes, note)
-	}
-
-	return notes, rows.Err()
-}
-
 // UpdateNote updates an existing note
 func UpdateNote(db *sql.DB, note *Note) error {
 	query := `
@@ -194,52 +155,4 @@ func DeleteNote(db *sql.DB, id int64) error {
 	query := `DELETE FROM notes WHERE id = ?`
 	_, err := db.Exec(query, id)
 	return err
-}
-
-// MarkNoteCompleted marks a note as completed
-func MarkNoteCompleted(db *sql.DB, id int64) error {
-	query := `
-		UPDATE notes
-		SET status = 'completed', updated_at = ?
-		WHERE id = ?
-	`
-
-	_, err := db.Exec(query, time.Now(), id)
-	return err
-}
-
-// GetAllNotes retrieves all notes
-func GetAllNotes(db *sql.DB) ([]*Note, error) {
-	query := `
-		SELECT id, title, description, scheduled_at, status, priority, created_at, updated_at
-		FROM notes
-		ORDER BY scheduled_at DESC, priority DESC
-	`
-
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var notes []*Note
-	for rows.Next() {
-		note := &Note{}
-		err := rows.Scan(
-			&note.ID,
-			&note.Title,
-			&note.Description,
-			&note.ScheduledAt,
-			&note.Status,
-			&note.Priority,
-			&note.CreatedAt,
-			&note.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-		notes = append(notes, note)
-	}
-
-	return notes, rows.Err()
 }

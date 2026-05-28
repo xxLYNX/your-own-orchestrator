@@ -19,11 +19,10 @@ type Template struct {
 	UpdatedAt   time.Time          `json:"updated_at" db:"updated_at"`
 }
 
-// TemplateDefinition is the complete template structure
+// TemplateDefinition is the complete template structure.
 type TemplateDefinition struct {
 	Inputs       []TemplateInput   `json:"inputs" yaml:"inputs"`
-	Composition  *ShapeNode        `json:"composition,omitempty" yaml:"composition,omitempty"`
-	Steps        []TemplateStep    `json:"steps" yaml:"steps"`
+	Structure    *ShapeNode        `json:"structure" yaml:"structure"`
 	Outputs      []TemplateOutput  `json:"outputs" yaml:"outputs"`
 	RecordSchema *RecordSchema     `json:"record_schema,omitempty" yaml:"record_schema,omitempty"`
 	Metadata     TemplateMetadata  `json:"metadata" yaml:"metadata"`
@@ -31,12 +30,12 @@ type TemplateDefinition struct {
 	Notes        string            `json:"notes,omitempty" yaml:"notes,omitempty"`
 }
 
-// GetComposition returns the normalized composition tree for this template.
-func (td *TemplateDefinition) GetComposition() (*ShapeNode, error) {
+// GetStructure returns the normalized structure tree for this template.
+func (td *TemplateDefinition) GetStructure() (*ShapeNode, error) {
 	if err := NormalizeTemplateDefinition(td); err != nil {
 		return nil, err
 	}
-	return td.Composition, nil
+	return td.Structure, nil
 }
 
 // RecordSchema defines the structure for repeating log-style records
@@ -62,16 +61,6 @@ type TemplateInput struct {
 	Required    bool     `json:"required" yaml:"required"`
 	Default     string   `json:"default,omitempty" yaml:"default,omitempty"`
 	Options     []string `json:"options,omitempty" yaml:"options,omitempty"` // For enum-like inputs
-}
-
-// TemplateStep defines a procedural step in the workflow
-type TemplateStep struct {
-	ID             int      `json:"id" yaml:"id"`
-	Title          string   `json:"title" yaml:"title"`
-	Description    string   `json:"description" yaml:"description"`
-	Checklist      []string `json:"checklist,omitempty" yaml:"checklist,omitempty"`
-	EstimatedTime  string   `json:"estimated_time,omitempty" yaml:"estimated_time,omitempty"`
-	OutputRequired string   `json:"output_required,omitempty" yaml:"output_required,omitempty"` // Name of output that must be provided
 }
 
 // TemplateOutput defines expected outputs/deliverables
@@ -106,23 +95,10 @@ type NoteTemplate struct {
 	CreatedAt    time.Time        `json:"created_at" db:"created_at"`
 }
 
-// TemplateInstance is the instantiated template with user-provided values
+// TemplateInstance is the instantiated template with user-provided values.
 type TemplateInstance struct {
 	Inputs  map[string]interface{} `json:"inputs"`
-	Steps   []StepInstance         `json:"steps"`
-	Outputs map[string]*Artifact   `json:"outputs"` // Key is output name
-}
-
-// StepInstance tracks the completion of a specific step
-type StepInstance struct {
-	ID          int64      `json:"id" db:"id"`
-	StepNumber  int        `json:"step_number" db:"step_number"`
-	Title       string     `json:"title" db:"title"`
-	Description string     `json:"description" db:"description"`
-	Completed   bool       `json:"completed" db:"completed"`
-	CompletedAt *time.Time `json:"completed_at,omitempty" db:"completed_at"`
-	Notes       string     `json:"notes,omitempty" db:"notes"`
-	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	Outputs map[string]*Artifact   `json:"outputs"`
 }
 
 // Artifact represents an input or output artifact
@@ -139,56 +115,25 @@ type Artifact struct {
 	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// Reference links to external resources
-type Reference struct {
-	ID          int64     `json:"id" db:"id"`
-	NoteID      int64     `json:"note_id" db:"note_id"`
-	Type        string    `json:"type" db:"ref_type"` // file, url, command, note
-	Value       string    `json:"value" db:"ref_value"`
-	Description string    `json:"description" db:"description"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-}
-
 // TemplateRecord represents a single record in a log-style template
 type TemplateRecord struct {
 	ID             int64                  `json:"id" db:"id"`
 	NoteTemplateID int64                  `json:"note_template_id" db:"note_template_id"`
 	RecordIndex    int                    `json:"record_index" db:"record_index"`
-	RepeatIndex    int                    `json:"repeat_index" db:"repeat_index"` // 0 = global; 1..N = repeat iteration
-	Data           map[string]interface{} `json:"data" db:"data"`                 // Stored as JSON
+	RepeatStack RepeatStack            `json:"repeat_stack" db:"repeat_stack_json"`
+	Data        map[string]interface{} `json:"data" db:"data"`
 	Status         string                 `json:"status" db:"status"` // draft, in_progress, complete
 	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time              `json:"updated_at" db:"updated_at"`
 }
 
-// Template shape identifiers — see shape.go for composable primitives.
-const (
-	ShapeLogLegacy       = "log"
-	ShapeChecklistLegacy = "checklist" // legacy alias; prefer ShapeProcedure in docs
-	ShapeArtifactLegacy  = "artifact"
-)
-
-// HasLogShape reports whether the template uses the log shape.
-func (td *TemplateDefinition) HasLogShape() bool {
-	comp, err := td.GetComposition()
-	if err != nil || comp == nil {
-		return td.RecordSchema != nil && len(td.RecordSchema.Fields) > 0
-	}
-	return containsShapeKind(comp, ShapeLog)
-}
-
 // HasProcedureShape reports whether the template uses ordered procedures.
 func (td *TemplateDefinition) HasProcedureShape() bool {
-	comp, err := td.GetComposition()
+	comp, err := td.GetStructure()
 	if err != nil || comp == nil {
-		return len(td.Steps) > 0
+		return false
 	}
 	return containsShapeKind(comp, ShapeProcedure)
-}
-
-// HasChecklistShape is kept for compatibility — means procedure or checklist nodes exist.
-func (td *TemplateDefinition) HasChecklistShape() bool {
-	return td.HasProcedureShape() || containsShapeKindFromDef(td, ShapeChecklist)
 }
 
 // HasArtifactShape reports whether the template uses artifact inputs/outputs.
@@ -200,7 +145,7 @@ func (td *TemplateDefinition) HasArtifactShape() bool {
 }
 
 func containsShapeKindFromDef(td *TemplateDefinition, kind string) bool {
-	comp, err := td.GetComposition()
+	comp, err := td.GetStructure()
 	if err != nil || comp == nil {
 		return false
 	}
@@ -214,37 +159,19 @@ func containsShapeKind(node *ShapeNode, kind string) bool {
 	if node.Kind == kind {
 		return true
 	}
-	for i := range node.Steps {
-		if containsShapeKind(&node.Steps[i], kind) {
+	for _, child := range node.ChildNodes() {
+		if containsShapeKind(&child, kind) {
 			return true
 		}
-	}
-	for i := range node.Items {
-		if containsShapeKind(&node.Items[i], kind) {
-			return true
-		}
-	}
-	if node.RepeatBody != nil && containsShapeKind(node.RepeatBody, kind) {
-		return true
 	}
 	return false
 }
 
 // ActiveShapes returns human-readable shape kinds in this template.
 func (td *TemplateDefinition) ActiveShapes() []string {
-	comp, err := td.GetComposition()
+	comp, err := td.GetStructure()
 	if err != nil || comp == nil {
-		var shapes []string
-		if td.HasLogShape() {
-			shapes = append(shapes, ShapeLog)
-		}
-		if len(td.Steps) > 0 {
-			shapes = append(shapes, ShapeProcedure)
-		}
-		if td.HasArtifactShape() {
-			shapes = append(shapes, ShapeArtifact)
-		}
-		return shapes
+		return nil
 	}
 	return comp.ActiveShapeKinds()
 }
@@ -255,18 +182,8 @@ func (td *TemplateDefinition) Validate() error {
 		return err
 	}
 
-	if td.Composition == nil {
-		return fmt.Errorf("template must define a composition tree or legacy shape fields")
-	}
-
-	// Validate step IDs are sequential
-	for i, step := range td.Steps {
-		if step.ID != i+1 {
-			return fmt.Errorf("step IDs must be sequential starting from 1, got %d at position %d", step.ID, i)
-		}
-		if step.Title == "" {
-			return fmt.Errorf("step %d must have a title", step.ID)
-		}
+	if td.Structure == nil {
+		return fmt.Errorf("template must define structure")
 	}
 
 	// Validate input types
@@ -296,15 +213,28 @@ func (td *TemplateDefinition) Validate() error {
 		}
 	}
 
-	// Validate output references in steps
+	// Validate output references in structure nodes
 	outputMap := make(map[string]bool)
 	for _, output := range td.Outputs {
 		outputMap[output.Name] = true
 	}
-	for _, step := range td.Steps {
-		if step.OutputRequired != "" && !outputMap[step.OutputRequired] {
-			return fmt.Errorf("step %d references non-existent output '%s'", step.ID, step.OutputRequired)
+	var validateOutputs func(*ShapeNode) error
+	validateOutputs = func(node *ShapeNode) error {
+		if node == nil {
+			return nil
 		}
+		if node.OutputRequired != "" && !outputMap[node.OutputRequired] {
+			return fmt.Errorf("shape %q references non-existent output %q", node.ID, node.OutputRequired)
+		}
+		for _, child := range node.ChildNodes() {
+			if err := validateOutputs(&child); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := validateOutputs(td.Structure); err != nil {
+		return err
 	}
 
 	return nil
@@ -390,17 +320,6 @@ func (rs *RecordSchema) ValidateRecord(data map[string]interface{}) error {
 	return nil
 }
 
-// GetRequiredInputs returns all required inputs
-func (td *TemplateDefinition) GetRequiredInputs() []TemplateInput {
-	var required []TemplateInput
-	for _, input := range td.Inputs {
-		if input.Required {
-			required = append(required, input)
-		}
-	}
-	return required
-}
-
 // GetRequiredOutputs returns all required outputs
 func (td *TemplateDefinition) GetRequiredOutputs() []TemplateOutput {
 	var required []TemplateOutput
@@ -410,96 +329,6 @@ func (td *TemplateDefinition) GetRequiredOutputs() []TemplateOutput {
 		}
 	}
 	return required
-}
-
-// CalculateProgress calculates the completion percentage of a template instance
-func (ti *TemplateInstance) CalculateProgress() float64 {
-	return ti.CalculateProgressWithRecords(0, nil)
-}
-
-// CalculateProgressWithRecords factors in log rows and repeat targets when available.
-func (ti *TemplateInstance) CalculateProgressWithRecords(recordCount int, def *TemplateDefinition) float64 {
-	stepTotal := len(ti.Steps)
-	stepDone := ti.GetCompletedSteps()
-
-	if def == nil || stepTotal == 0 {
-		if stepTotal == 0 {
-			return 0
-		}
-		return float64(stepDone) / float64(stepTotal)
-	}
-
-	comp, err := def.GetComposition()
-	if err != nil || comp == nil {
-		return float64(stepDone) / float64(stepTotal)
-	}
-
-	var repeatNode *ShapeNode
-	var findRepeat func(*ShapeNode)
-	findRepeat = func(n *ShapeNode) {
-		if n == nil || repeatNode != nil {
-			return
-		}
-		if n.Kind == ShapeRepeat {
-			repeatNode = n
-			return
-		}
-		for i := range n.Steps {
-			findRepeat(&n.Steps[i])
-		}
-		if n.RepeatBody != nil {
-			findRepeat(n.RepeatBody)
-		}
-	}
-	findRepeat(comp)
-
-	if repeatNode == nil {
-		return float64(stepDone) / float64(stepTotal)
-	}
-
-	target := repeatNode.ResolveRepeatCount(ti.Inputs)
-	if target <= 0 {
-		return float64(stepDone) / float64(stepTotal)
-	}
-
-	if recordCount > target {
-		recordCount = target
-	}
-
-	totalUnits := stepTotal + target
-	doneUnits := stepDone + recordCount
-	return float64(doneUnits) / float64(totalUnits)
-}
-
-// GetCompletedSteps returns the number of completed steps
-func (ti *TemplateInstance) GetCompletedSteps() int {
-	count := 0
-	for _, step := range ti.Steps {
-		if step.Completed {
-			count++
-		}
-	}
-	return count
-}
-
-// IsComplete checks if all required steps and outputs are complete
-func (ti *TemplateInstance) IsComplete(definition *TemplateDefinition) bool {
-	// Check all steps are completed
-	for _, step := range ti.Steps {
-		if !step.Completed {
-			return false
-		}
-	}
-
-	// Check all required outputs are provided
-	for _, output := range definition.GetRequiredOutputs() {
-		artifact, exists := ti.Outputs[output.Name]
-		if !exists || artifact == nil {
-			return false
-		}
-	}
-
-	return true
 }
 
 // MarshalJSON custom JSON marshaling for TemplateDefinition
@@ -523,32 +352,12 @@ func (td *TemplateDefinition) UnmarshalJSON(data []byte) error {
 	return json.Unmarshal(data, aux)
 }
 
-// NewTemplateInstance creates a new template instance from a definition
+// NewTemplateInstance creates a new template instance from a definition.
 func NewTemplateInstance(definition *TemplateDefinition, inputs map[string]interface{}) *TemplateInstance {
 	_ = NormalizeTemplateDefinition(definition)
-
-	// Initialize steps from normalized legacy sync (top-level procedures)
-	steps := make([]StepInstance, len(definition.Steps))
-	for i, defStep := range definition.Steps {
-		steps[i] = StepInstance{
-			StepNumber:  defStep.ID,
-			Title:       defStep.Title,
-			Description: defStep.Description,
-			Completed:   false,
-			CreatedAt:   time.Now(),
-		}
-	}
-
-	// Initialize outputs map
-	outputs := make(map[string]*Artifact)
-	for _, defOutput := range definition.Outputs {
-		outputs[defOutput.Name] = nil // Will be filled when user provides output
-	}
-
 	return &TemplateInstance{
 		Inputs:  inputs,
-		Steps:   steps,
-		Outputs: outputs,
+		Outputs: map[string]*Artifact{},
 	}
 }
 

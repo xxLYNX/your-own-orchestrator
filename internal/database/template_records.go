@@ -10,15 +10,15 @@ import (
 )
 
 // GetNextRecordIndex gets the next available record index for a note template scope.
-func GetNextRecordIndex(conn *sql.DB, noteTemplateID int64, repeatIndex int) (int, error) {
+func GetNextRecordIndex(conn *sql.DB, noteTemplateID int64, stack models.RepeatStack) (int, error) {
 	query := `
 		SELECT COALESCE(MAX(record_index), 0) + 1
 		FROM template_records
-		WHERE note_template_id = ? AND repeat_index = ?
+		WHERE note_template_id = ? AND repeat_stack_json = ?
 	`
 
 	var nextIndex int
-	err := conn.QueryRow(query, noteTemplateID, repeatIndex).Scan(&nextIndex)
+	err := conn.QueryRow(query, noteTemplateID, stack.JSON()).Scan(&nextIndex)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get next record index: %w", err)
 	}
@@ -33,8 +33,12 @@ func CreateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 		return fmt.Errorf("failed to marshal record data: %w", err)
 	}
 
+	if record.RepeatStack == nil {
+		record.RepeatStack = nil
+	}
+
 	if record.RecordIndex == 0 {
-		record.RecordIndex, err = GetNextRecordIndex(conn, record.NoteTemplateID, record.RepeatIndex)
+		record.RecordIndex, err = GetNextRecordIndex(conn, record.NoteTemplateID, record.RepeatStack)
 		if err != nil {
 			return err
 		}
@@ -45,14 +49,14 @@ func CreateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 	}
 
 	query := `
-		INSERT INTO template_records (note_template_id, repeat_index, record_index, data, status, created_at, updated_at)
+		INSERT INTO template_records (note_template_id, repeat_stack_json, record_index, data, status, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
 
 	now := time.Now()
 	result, err := conn.Exec(query,
 		record.NoteTemplateID,
-		record.RepeatIndex,
+		record.RepeatStack.JSON(),
 		record.RecordIndex,
 		string(dataJSON),
 		record.Status,
@@ -75,29 +79,29 @@ func CreateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 }
 
 // ListTemplateRecords retrieves records for a note template.
-// repeatIndex < 0 returns all repeat scopes; otherwise filters to that iteration (0 = global).
-func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) ([]*models.TemplateRecord, error) {
+// stack == nil returns all repeat scopes; otherwise filters to that occurrence context.
+func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, stack models.RepeatStack) ([]*models.TemplateRecord, error) {
 	var (
 		query string
 		args  []interface{}
 	)
 
-	if repeatIndex < 0 {
+	if stack == nil {
 		query = `
-			SELECT id, note_template_id, repeat_index, record_index, data, status, created_at, updated_at
+			SELECT id, note_template_id, repeat_stack_json, record_index, data, status, created_at, updated_at
 			FROM template_records
 			WHERE note_template_id = ?
-			ORDER BY repeat_index ASC, record_index ASC
+			ORDER BY repeat_stack_json ASC, record_index ASC
 		`
 		args = []interface{}{noteTemplateID}
 	} else {
 		query = `
-			SELECT id, note_template_id, repeat_index, record_index, data, status, created_at, updated_at
+			SELECT id, note_template_id, repeat_stack_json, record_index, data, status, created_at, updated_at
 			FROM template_records
-			WHERE note_template_id = ? AND repeat_index = ?
+			WHERE note_template_id = ? AND repeat_stack_json = ?
 			ORDER BY record_index ASC
 		`
-		args = []interface{}{noteTemplateID, repeatIndex}
+		args = []interface{}{noteTemplateID, stack.JSON()}
 	}
 
 	rows, err := conn.Query(query, args...)
@@ -109,12 +113,12 @@ func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) ([
 	var records []*models.TemplateRecord
 	for rows.Next() {
 		record := &models.TemplateRecord{}
-		var dataJSON string
+		var dataJSON, stackJSON string
 
 		err := rows.Scan(
 			&record.ID,
 			&record.NoteTemplateID,
-			&record.RepeatIndex,
+			&stackJSON,
 			&record.RecordIndex,
 			&dataJSON,
 			&record.Status,
@@ -124,6 +128,8 @@ func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) ([
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan template record: %w", err)
 		}
+
+		record.RepeatStack = models.ParseRepeatStackJSON(stackJSON)
 
 		if err := json.Unmarshal([]byte(dataJSON), &record.Data); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal record data: %w", err)
@@ -140,16 +146,16 @@ func ListTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) ([
 }
 
 // CountTemplateRecords returns how many records exist for a note template scope.
-func CountTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) (int, error) {
+func CountTemplateRecords(conn *sql.DB, noteTemplateID int64, stack models.RepeatStack) (int, error) {
 	var query string
 	var args []interface{}
 
-	if repeatIndex < 0 {
+	if stack == nil {
 		query = `SELECT COUNT(*) FROM template_records WHERE note_template_id = ?`
 		args = []interface{}{noteTemplateID}
 	} else {
-		query = `SELECT COUNT(*) FROM template_records WHERE note_template_id = ? AND repeat_index = ?`
-		args = []interface{}{noteTemplateID, repeatIndex}
+		query = `SELECT COUNT(*) FROM template_records WHERE note_template_id = ? AND repeat_stack_json = ?`
+		args = []interface{}{noteTemplateID, stack.JSON()}
 	}
 
 	var count int
@@ -159,21 +165,21 @@ func CountTemplateRecords(conn *sql.DB, noteTemplateID int64, repeatIndex int) (
 	return count, nil
 }
 
-// GetTemplateRecord retrieves a specific record by note template ID, repeat index, and record index.
-func GetTemplateRecord(conn *sql.DB, noteTemplateID int64, repeatIndex int, recordIndex int) (*models.TemplateRecord, error) {
+// GetTemplateRecord retrieves a specific record by note template ID, repeat stack, and record index.
+func GetTemplateRecord(conn *sql.DB, noteTemplateID int64, stack models.RepeatStack, recordIndex int) (*models.TemplateRecord, error) {
 	query := `
-		SELECT id, note_template_id, repeat_index, record_index, data, status, created_at, updated_at
+		SELECT id, note_template_id, repeat_stack_json, record_index, data, status, created_at, updated_at
 		FROM template_records
-		WHERE note_template_id = ? AND repeat_index = ? AND record_index = ?
+		WHERE note_template_id = ? AND repeat_stack_json = ? AND record_index = ?
 	`
 
 	record := &models.TemplateRecord{}
-	var dataJSON string
+	var dataJSON, stackJSON string
 
-	err := conn.QueryRow(query, noteTemplateID, repeatIndex, recordIndex).Scan(
+	err := conn.QueryRow(query, noteTemplateID, stack.JSON(), recordIndex).Scan(
 		&record.ID,
 		&record.NoteTemplateID,
-		&record.RepeatIndex,
+		&stackJSON,
 		&record.RecordIndex,
 		&dataJSON,
 		&record.Status,
@@ -186,6 +192,8 @@ func GetTemplateRecord(conn *sql.DB, noteTemplateID int64, repeatIndex int, reco
 		}
 		return nil, fmt.Errorf("failed to get template record: %w", err)
 	}
+
+	record.RepeatStack = models.ParseRepeatStackJSON(stackJSON)
 
 	if err := json.Unmarshal([]byte(dataJSON), &record.Data); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal record data: %w", err)
@@ -204,7 +212,7 @@ func UpdateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 	query := `
 		UPDATE template_records
 		SET data = ?, status = ?, updated_at = ?
-		WHERE note_template_id = ? AND repeat_index = ? AND record_index = ?
+		WHERE note_template_id = ? AND repeat_stack_json = ? AND record_index = ?
 	`
 
 	record.UpdatedAt = time.Now()
@@ -214,7 +222,7 @@ func UpdateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 		record.Status,
 		record.UpdatedAt,
 		record.NoteTemplateID,
-		record.RepeatIndex,
+		record.RepeatStack.JSON(),
 		record.RecordIndex,
 	)
 	if err != nil {
@@ -234,10 +242,10 @@ func UpdateTemplateRecord(conn *sql.DB, record *models.TemplateRecord) error {
 }
 
 // DeleteTemplateRecord deletes a template record by scope keys.
-func DeleteTemplateRecord(conn *sql.DB, noteTemplateID int64, repeatIndex int, recordIndex int) error {
-	query := `DELETE FROM template_records WHERE note_template_id = ? AND repeat_index = ? AND record_index = ?`
+func DeleteTemplateRecord(conn *sql.DB, noteTemplateID int64, stack models.RepeatStack, recordIndex int) error {
+	query := `DELETE FROM template_records WHERE note_template_id = ? AND repeat_stack_json = ? AND record_index = ?`
 
-	result, err := conn.Exec(query, noteTemplateID, repeatIndex, recordIndex)
+	result, err := conn.Exec(query, noteTemplateID, stack.JSON(), recordIndex)
 	if err != nil {
 		return fmt.Errorf("failed to delete template record: %w", err)
 	}

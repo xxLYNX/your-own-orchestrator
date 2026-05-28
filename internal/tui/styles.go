@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -29,7 +28,6 @@ var (
 	// Neutral colors
 	ColorMuted      = lipgloss.Color("#666666")
 	ColorSubtle     = lipgloss.Color("#999999")
-	ColorBackground = lipgloss.Color("#1A1A1A")
 	ColorForeground = lipgloss.Color("#FFFFFF")
 	ColorBorder     = lipgloss.Color("#444444")
 
@@ -100,22 +98,6 @@ var (
 				Foreground(ColorForeground).
 				Bold(true).
 				Padding(0, 1)
-
-	// TableRowAlternateStyle is for alternating row colors
-	TableRowAlternateStyle = lipgloss.NewStyle().
-				Background(ColorDimmed).
-				Foreground(ColorForeground).
-				Padding(0, 1)
-
-	// TableCellStyle is for individual table cells
-	TableCellStyle = lipgloss.NewStyle().
-			Padding(0, 1)
-
-	// TableBorderStyle defines table borders
-	TableBorderStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(ColorBorder).
-				Padding(1, 2)
 )
 
 // ==================== Progress Styles ====================
@@ -210,60 +192,9 @@ var (
 				Foreground(ColorMuted)
 )
 
-// ==================== Border Styles ====================
-
-var (
-	// BorderNormalStyle is a normal border
-	BorderNormalStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.NormalBorder()).
-				BorderForeground(ColorBorder)
-
-	// BorderRoundedStyle is a rounded border
-	BorderRoundedStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(ColorBorder)
-
-	// BorderDoubleStyle is a double-line border
-	BorderDoubleStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.DoubleBorder()).
-				BorderForeground(ColorBorder)
-
-	// BorderThickStyle is a thick border
-	BorderThickStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.ThickBorder()).
-				BorderForeground(ColorBorder)
-
-	// BorderHighlightStyle is a highlighted border
-	BorderHighlightStyle = lipgloss.NewStyle().
-				BorderStyle(lipgloss.RoundedBorder()).
-				BorderForeground(ColorPrimary)
-)
-
 // ==================== Layout Styles ====================
 
 var (
-	// PaddingStyle adds padding
-	PaddingStyle = lipgloss.NewStyle().Padding(1, 2)
-
-	// MarginStyle adds margin
-	MarginStyle = lipgloss.NewStyle().Margin(1, 2)
-
-	// CenterStyle centers content
-	CenterStyle = lipgloss.NewStyle().Align(lipgloss.Center)
-
-	// LeftStyle aligns content to the left
-	LeftStyle = lipgloss.NewStyle().Align(lipgloss.Left)
-
-	// RightStyle aligns content to the right
-	RightStyle = lipgloss.NewStyle().Align(lipgloss.Right)
-
-	// BoxStyle is a basic box container
-	BoxStyle = lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(ColorBorder).
-			Padding(1, 2).
-			Margin(1, 0)
-
 	// PanelStyle is for larger panels with content
 	PanelStyle = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
@@ -320,11 +251,6 @@ var (
 			Foreground(ColorSubtle).
 			Bold(true).
 			MarginRight(1)
-
-	// PlaceholderStyle is for placeholder text
-	PlaceholderStyle = lipgloss.NewStyle().
-				Foreground(ColorMuted).
-				Italic(true)
 )
 
 // ==================== Message Styles ====================
@@ -345,12 +271,6 @@ var (
 	// WarningMessageStyle is for warning messages
 	WarningMessageStyle = lipgloss.NewStyle().
 				Foreground(ColorWarning).
-				Bold(true).
-				Padding(0, 1)
-
-	// InfoMessageStyle is for info messages
-	InfoMessageStyle = lipgloss.NewStyle().
-				Foreground(ColorInfo).
 				Bold(true).
 				Padding(0, 1)
 )
@@ -396,46 +316,12 @@ func ProgressBar(current, total int, width int) string {
 	return filled + empty
 }
 
-// ProgressBarWithPercentage creates a progress bar with percentage display
-func ProgressBarWithPercentage(current, total int, width int) string {
-	if total == 0 {
-		return ProgressBar(0, 1, width) + " " + ProgressPercentStyle.Render("0%")
-	}
-
-	percentage := float64(current) / float64(total) * 100.0
-	if percentage > 100.0 {
-		percentage = 100.0
-	}
-
-	bar := ProgressBar(current, total, width)
-	percent := ProgressPercentStyle.Render(fmt.Sprintf("%.1f%%", percentage))
-
-	return bar + " " + percent
-}
-
-// ProgressBarWithLabel creates a progress bar with label and percentage
-func ProgressBarWithLabel(label string, current, total int, width int) string {
-	labelText := ProgressTextStyle.Render(label + ":")
-	bar := ProgressBarWithPercentage(current, total, width)
-	return labelText + " " + bar
-}
-
 // Checkbox returns a styled checkbox (checked or unchecked)
 func Checkbox(checked bool) string {
 	if checked {
 		return lipgloss.NewStyle().Foreground(ColorSuccess).Render("☑")
 	}
 	return lipgloss.NewStyle().Foreground(ColorMuted).Render("☐")
-}
-
-// Bullet returns a styled bullet point
-func Bullet() string {
-	return ListBulletStyle.Render("•")
-}
-
-// Arrow returns a styled arrow indicator
-func Arrow() string {
-	return lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true).Render("→")
 }
 
 // Cursor returns a styled cursor for selected items
@@ -448,13 +334,6 @@ func Divider(width int) string {
 	return lipgloss.NewStyle().
 		Foreground(ColorBorder).
 		Render(strings.Repeat("─", width))
-}
-
-// ThickDivider returns a thick horizontal divider line
-func ThickDivider(width int) string {
-	return lipgloss.NewStyle().
-		Foreground(ColorBorder).
-		Render(strings.Repeat("━", width))
 }
 
 // KeyBinding formats a key binding for help text
@@ -473,29 +352,6 @@ func KeyBindings(bindings ...string) string {
 		}
 	}
 	return strings.Join(parts, HelpSeparatorStyle.Render(" • "))
-}
-
-// Priority returns a styled priority indicator
-func Priority(level int) string {
-	switch level {
-	case 3, 4, 5:
-		return lipgloss.NewStyle().Foreground(ColorError).Bold(true).Render("!!!")
-	case 2:
-		return lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).Render("!!")
-	case 1:
-		return lipgloss.NewStyle().Foreground(ColorInfo).Bold(true).Render("!")
-	default:
-		return lipgloss.NewStyle().Foreground(ColorMuted).Render("-")
-	}
-}
-
-// Tag returns a styled tag
-func Tag(text string) string {
-	return lipgloss.NewStyle().
-		Foreground(ColorPrimary).
-		Background(lipgloss.Color("#2A1F3D")).
-		Padding(0, 1).
-		Render("#" + text)
 }
 
 // DateBadge returns a styled date badge
@@ -527,33 +383,14 @@ func EmptyState(message string) string {
 		Render(message)
 }
 
-// LoadingSpinner returns a loading spinner character based on frame
-func LoadingSpinner(frame int) string {
-	spinners := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-	return lipgloss.NewStyle().
-		Foreground(ColorPrimary).
-		Bold(true).
-		Render(spinners[frame%len(spinners)])
-}
-
 // SuccessIcon returns a success checkmark icon
 func SuccessIcon() string {
 	return lipgloss.NewStyle().Foreground(ColorSuccess).Bold(true).Render("✓")
 }
 
-// ErrorIcon returns an error X icon
-func ErrorIcon() string {
-	return lipgloss.NewStyle().Foreground(ColorError).Bold(true).Render("✗")
-}
-
 // WarningIcon returns a warning icon
 func WarningIcon() string {
 	return lipgloss.NewStyle().Foreground(ColorWarning).Bold(true).Render("⚠")
-}
-
-// InfoIcon returns an info icon
-func InfoIcon() string {
-	return lipgloss.NewStyle().Foreground(ColorInfo).Bold(true).Render("ℹ")
 }
 
 // Truncate truncates a string to a maximum length with ellipsis
@@ -573,23 +410,4 @@ func PadRight(s string, width int) string {
 		return s
 	}
 	return s + strings.Repeat(" ", width-len(s))
-}
-
-// PadLeft pads a string to a specific width with spaces on the left
-func PadLeft(s string, width int) string {
-	if len(s) >= width {
-		return s
-	}
-	return strings.Repeat(" ", width-len(s)) + s
-}
-
-// Center centers a string within a specific width
-func Center(s string, width int) string {
-	if len(s) >= width {
-		return s
-	}
-	padding := width - len(s)
-	leftPad := padding / 2
-	rightPad := padding - leftPad
-	return strings.Repeat(" ", leftPad) + s + strings.Repeat(" ", rightPad)
 }

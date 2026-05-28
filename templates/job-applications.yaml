@@ -1,4 +1,4 @@
-# Job Applications Template (v2 — fractal composition)
+# Job Applications Template (v2 — fractal structure)
 # Setup once → repeat per application → wrap up and export
 
 name: "Job Applications"
@@ -84,7 +84,7 @@ record_schema:
       description: "Additional notes about this application"
       required: false
 
-composition:
+structure:
   id: root
   kind: procedure
   title: Workflow
@@ -108,38 +108,39 @@ composition:
               title: "Set a realistic target count for this sprint"
 
     - id: applications
-      kind: repeat
+      kind: procedure
       title: Applications
-      repeat_count: target_count
-      repeat_body:
-        id: apply_one
-        kind: procedure
-        title: Single application
-        description: Find, customize, apply, and log one job
-        steps:
-          - id: apply-workflow
-            kind: procedure
-            title: Application workflow
-            steps:
-              - id: apply-checklist
-                kind: checklist
-                title: Per-application checklist
-                items:
-                  - kind: checklist
-                    title: "Find a relevant opening"
-                  - kind: checklist
-                    title: "Review job requirements and fit"
-                  - kind: checklist
-                    title: "Tailor resume for this role"
-                  - kind: checklist
-                    title: "Customize cover letter if needed"
-                  - kind: checklist
-                    title: "Submit application and save confirmation"
-          - id: application-log
-            kind: log
-            title: Application record
-            record_schema:
-              fields:
+      repeat:
+        count: target_count
+      steps:
+        - id: apply_one
+          kind: procedure
+          title: Single application
+          description: Find, customize, apply, and log one job
+          steps:
+            - id: apply-workflow
+              kind: procedure
+              title: Application workflow
+              steps:
+                - id: apply-checklist
+                  kind: checklist
+                  title: Per-application checklist
+                  items:
+                    - kind: checklist
+                      title: "Find a relevant opening"
+                    - kind: checklist
+                      title: "Review job requirements and fit"
+                    - kind: checklist
+                      title: "Tailor resume for this role"
+                    - kind: checklist
+                      title: "Customize cover letter if needed"
+                    - kind: checklist
+                      title: "Submit application and save confirmation"
+            - id: application-log
+              kind: log
+              title: Application record
+              record_schema:
+                fields:
                 - name: "company"
                   type: "text"
                   required: true
@@ -237,5 +238,5 @@ examples:
         --input resume=~/Documents/resume-2024.pdf
 
 notes: |
-  Fractal composition: Preparation (once) → Applications × target_count → Wrap up (once).
+  Fractal structure: Preparation (once) → Applications × target_count → Wrap up (once).
   Drill into each application in the TUI to complete its checklist and log row.

@@ -2,19 +2,29 @@ package models
 
 import "strings"
 
+// InstanceStatus is the runtime lifecycle for a shape occurrence.
+type InstanceStatus string
+
+const (
+	StatusNotStarted InstanceStatus = "not_started"
+	StatusInProgress InstanceStatus = "in_progress"
+	StatusComplete   InstanceStatus = "complete"
+)
+
 // ShapeStateData holds per-shape runtime payload stored as JSON.
 type ShapeStateData struct {
 	ItemCompletion map[string]bool `json:"item_completion,omitempty"`
 }
 
-// ShapeState tracks runtime completion for a node in the composition tree.
+// ShapeState tracks runtime completion for a node in the structure tree.
 type ShapeState struct {
 	ID             int64          `json:"id" db:"id"`
 	NoteTemplateID int64          `json:"note_template_id" db:"note_template_id"`
 	ShapePath      string         `json:"shape_path" db:"shape_path"`
-	RepeatIndex    int            `json:"repeat_index" db:"repeat_index"`
+	RepeatStack    RepeatStack    `json:"repeat_stack" db:"repeat_stack_json"`
 	Kind           string         `json:"kind" db:"kind"`
 	Title          string         `json:"title" db:"title"`
+	Status         InstanceStatus `json:"status" db:"status"`
 	Completed      bool           `json:"completed" db:"completed"`
 	CompletedAt    *string        `json:"completed_at,omitempty" db:"completed_at"`
 	Notes          string         `json:"notes,omitempty" db:"notes"`
@@ -26,7 +36,7 @@ type ShapeState struct {
 // ShapeStateInit describes a row to create when a note is instantiated.
 type ShapeStateInit struct {
 	Path        string
-	RepeatIndex int
+	RepeatStack RepeatStack
 	Kind        string
 	Title       string
 	ItemIDs     []string
@@ -35,86 +45,6 @@ type ShapeStateInit struct {
 // ShapePath joins navigation IDs into a stable storage key.
 func ShapePath(ids []string) string {
 	return strings.Join(ids, ".")
-}
-
-// FindFirstChecklist returns the first checklist node in this subtree.
-func (n *ShapeNode) FindFirstChecklist() *ShapeNode {
-	if n == nil {
-		return nil
-	}
-	if n.Kind == ShapeChecklist {
-		return n
-	}
-	for i := range n.Steps {
-		if found := n.Steps[i].FindFirstChecklist(); found != nil {
-			return found
-		}
-	}
-	if n.RepeatBody != nil {
-		return n.RepeatBody.FindFirstChecklist()
-	}
-	return nil
-}
-
-// CollectShapeStateInits walks a composition tree and returns runtime state slots.
-func (n *ShapeNode) CollectShapeStateInits(path []string, repeatIndex int, inputs map[string]interface{}) []ShapeStateInit {
-	var out []ShapeStateInit
-	n.collectShapeStateInits(path, repeatIndex, inputs, &out)
-	return out
-}
-
-func (n *ShapeNode) collectShapeStateInits(path []string, repeatIndex int, inputs map[string]interface{}, out *[]ShapeStateInit) {
-	if n == nil {
-		return
-	}
-
-	currentPath := append(append([]string{}, path...), n.ID)
-	pathStr := ShapePath(currentPath)
-
-	switch n.Kind {
-	case ShapeRepeat:
-		count := n.ResolveRepeatCount(inputs)
-		if n.RepeatBody != nil {
-			for i := 1; i <= count; i++ {
-				n.RepeatBody.collectShapeStateInits(currentPath, i, inputs, out)
-			}
-		}
-		return
-
-	case ShapeChecklist:
-		var itemIDs []string
-		for _, item := range n.Items {
-			itemIDs = append(itemIDs, item.ID)
-		}
-		*out = append(*out, ShapeStateInit{
-			Path:        pathStr,
-			RepeatIndex: repeatIndex,
-			Kind:        ShapeChecklist,
-			Title:       n.DisplayTitle(),
-			ItemIDs:     itemIDs,
-		})
-		return
-
-	case ShapeProcedure:
-		if n.ID != "root" && n.Title != "" {
-			*out = append(*out, ShapeStateInit{
-				Path:        pathStr,
-				RepeatIndex: repeatIndex,
-				Kind:        ShapeProcedure,
-				Title:       n.DisplayTitle(),
-			})
-		}
-		for i := range n.Steps {
-			switch n.Steps[i].Kind {
-			case ShapeLog, ShapeArtifact:
-				continue
-			}
-			n.Steps[i].collectShapeStateInits(currentPath, repeatIndex, inputs, out)
-		}
-		if n.RepeatBody != nil {
-			n.RepeatBody.collectShapeStateInits(currentPath, repeatIndex, inputs, out)
-		}
-	}
 }
 
 // ChecklistItemView is a display row for scoped checklist editing.
@@ -130,7 +60,7 @@ func ChecklistItemsFromState(node *ShapeNode, state *ShapeState) []ChecklistItem
 		return nil
 	}
 	var items []ChecklistItemView
-	for _, item := range node.Items {
+	for _, item := range node.ChildNodes() {
 		completed := false
 		if state.Data.ItemCompletion != nil {
 			completed = state.Data.ItemCompletion[item.ID]
@@ -155,4 +85,78 @@ func AllChecklistItemsComplete(state *ShapeState) bool {
 		}
 	}
 	return true
+}
+
+// shapeStateWalkOpts skips runtime state rows for log and artifact nodes.
+var shapeStateWalkOpts = &WalkOptions{
+	SkipChildKinds: map[string]bool{
+		ShapeLog:      true,
+		ShapeArtifact: true,
+	},
+}
+
+// CollectShapeStateInits walks a structure tree and returns runtime state slots.
+func (n *ShapeNode) CollectShapeStateInits(path []string, stack RepeatStack, inputs map[string]interface{}) []ShapeStateInit {
+	var out []ShapeStateInit
+	WalkOccurrencesWithOptions(n, path, stack, inputs, func(node *ShapeNode, currentPath []string, iterStack RepeatStack) {
+		node.appendOccurrenceStateInit(currentPath, iterStack, &out)
+	}, shapeStateWalkOpts)
+	return out
+}
+
+func (n *ShapeNode) appendOccurrenceStateInit(path []string, stack RepeatStack, out *[]ShapeStateInit) {
+	pathStr := ShapePath(path)
+
+	switch n.Kind {
+	case ShapeChecklist:
+		var itemIDs []string
+		for _, item := range n.ChildNodes() {
+			itemIDs = append(itemIDs, item.ID)
+		}
+		*out = append(*out, ShapeStateInit{
+			Path:        pathStr,
+			RepeatStack: stack,
+			Kind:        ShapeChecklist,
+			Title:       n.DisplayTitle(),
+			ItemIDs:     itemIDs,
+		})
+	case ShapeAction:
+		*out = append(*out, ShapeStateInit{
+			Path:        pathStr,
+			RepeatStack: stack,
+			Kind:        ShapeAction,
+			Title:       n.DisplayTitle(),
+		})
+	case ShapeProcedure:
+		if n.ID != "root" && n.Title != "" {
+			*out = append(*out, ShapeStateInit{
+				Path:        pathStr,
+				RepeatStack: stack,
+				Kind:        ShapeProcedure,
+				Title:       n.DisplayTitle(),
+			})
+		}
+	}
+}
+
+// FindStateByStack returns the first state row matching a repeat stack.
+func FindStateByStack(states []*ShapeState, stack RepeatStack) *ShapeState {
+	for _, state := range states {
+		if state.RepeatStack.Equal(stack) {
+			return state
+		}
+	}
+	return nil
+}
+
+// NewShapeStateData builds default runtime payload for a shape state init.
+func NewShapeStateData(init ShapeStateInit) ShapeStateData {
+	data := ShapeStateData{}
+	if init.Kind == ShapeChecklist {
+		data.ItemCompletion = make(map[string]bool, len(init.ItemIDs))
+		for _, id := range init.ItemIDs {
+			data.ItemCompletion[id] = false
+		}
+	}
+	return data
 }

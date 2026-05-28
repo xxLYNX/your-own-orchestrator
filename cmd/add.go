@@ -214,15 +214,13 @@ func createTemplatedNote(db *database.DB, title string, scheduleDate time.Time, 
 	fmt.Printf("✓ Created templated note: %s\n", title)
 	fmt.Printf("  Template: %s (v%s)\n", template.Name, template.Version)
 	fmt.Printf("  Note ID: %d\n", note.ID)
-	if len(template.Definition.Steps) > 0 {
-		fmt.Printf("  Steps: %d\n", len(template.Definition.Steps))
+	fmt.Printf("  Shapes: %s\n", strings.Join(template.Definition.ActiveShapes(), ", "))
+	if template.Definition.HasProcedureShape() {
+		fmt.Printf("  Manage with: yoo step list %d\n", note.ID)
 	}
 	if template.Definition.RecordSchema != nil {
 		fmt.Printf("  Record schema: %d fields\n", len(template.Definition.RecordSchema.Fields))
 		fmt.Printf("  Add records with: yoo records add %d\n", note.ID)
-	}
-	if len(template.Definition.Steps) > 0 {
-		fmt.Printf("  Complete steps with: yoo step complete %d <step-number>\n", note.ID)
 	}
 	if len(template.Definition.Outputs) > 0 {
 		fmt.Printf("  Outputs required: %d\n", len(template.Definition.GetRequiredOutputs()))

@@ -38,74 +38,136 @@ inputs:
     description: "What defines success for this milestone"
     required: true
 
-# Procedural steps to complete the milestone
-steps:
-  - id: 1
-    title: "Planning and breakdown"
-    description: "Create detailed plan and break down work into tasks"
-    checklist:
-      - "Review project specification thoroughly"
-      - "Identify all required deliverables"
-      - "Break down work into actionable tasks"
-      - "Estimate time and resources for each task"
-      - "Identify dependencies and blockers"
-      - "Create timeline with buffer for issues"
-      - "Set up tracking system (board, spreadsheet, etc.)"
-    estimated_time: "2-4 hours"
+# Workflow structure
+structure:
+  id: root
+  kind: procedure
+  title: Workflow
+  steps:
+    - id: planning
+      kind: procedure
+      title: "Planning and breakdown"
+      description: "Create detailed plan and break down work into tasks"
+      estimated_time: "2-4 hours"
+      steps:
+        - id: planning-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Review project specification thoroughly"
+            - kind: action
+              title: "Identify all required deliverables"
+            - kind: action
+              title: "Break down work into actionable tasks"
+            - kind: action
+              title: "Estimate time and resources for each task"
+            - kind: action
+              title: "Identify dependencies and blockers"
+            - kind: action
+              title: "Create timeline with buffer for issues"
+            - kind: action
+              title: "Set up tracking system (board, spreadsheet, etc.)"
 
-  - id: 2
-    title: "Implementation"
-    description: "Execute the planned work to build the milestone deliverables"
-    checklist:
-      - "Set up development environment"
-      - "Implement core functionality"
-      - "Handle edge cases"
-      - "Integrate with existing systems"
-      - "Conduct code reviews (if applicable)"
-      - "Address feedback and iterate"
-    estimated_time: "varies by project scope"
-    output_required: "deliverable"
+    - id: implementation
+      kind: procedure
+      title: "Implementation"
+      description: "Execute the planned work to build the milestone deliverables"
+      estimated_time: "varies by project scope"
+      output_required: "deliverable"
+      steps:
+        - id: implementation-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Set up development environment"
+            - kind: action
+              title: "Implement core functionality"
+            - kind: action
+              title: "Handle edge cases"
+            - kind: action
+              title: "Integrate with existing systems"
+            - kind: action
+              title: "Conduct code reviews (if applicable)"
+            - kind: action
+              title: "Address feedback and iterate"
 
-  - id: 3
-    title: "Testing and quality assurance"
-    description: "Verify that deliverables meet requirements and quality standards"
-    checklist:
-      - "Create test plan based on success criteria"
-      - "Execute unit tests"
-      - "Perform integration testing"
-      - "Conduct user acceptance testing"
-      - "Document test results"
-      - "Fix critical bugs"
-      - "Verify all success criteria are met"
-    estimated_time: "1-3 days"
-    output_required: "test_results"
+    - id: testing
+      kind: procedure
+      title: "Testing and quality assurance"
+      description: "Verify that deliverables meet requirements and quality standards"
+      estimated_time: "1-3 days"
+      output_required: "test_results"
+      steps:
+        - id: testing-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Create test plan based on success criteria"
+            - kind: action
+              title: "Execute unit tests"
+            - kind: action
+              title: "Perform integration testing"
+            - kind: action
+              title: "Conduct user acceptance testing"
+            - kind: action
+              title: "Document test results"
+            - kind: action
+              title: "Fix critical bugs"
+            - kind: action
+              title: "Verify all success criteria are met"
 
-  - id: 4
-    title: "Documentation"
-    description: "Create comprehensive documentation for the milestone"
-    checklist:
-      - "Write technical documentation"
-      - "Create user guides or README"
-      - "Document known issues and limitations"
-      - "Update project wiki or docs site"
-      - "Record design decisions (ADRs if applicable)"
-      - "Prepare demo materials"
-    estimated_time: "4-8 hours"
-    output_required: "documentation"
+    - id: documentation
+      kind: procedure
+      title: "Documentation"
+      description: "Create comprehensive documentation for the milestone"
+      estimated_time: "4-8 hours"
+      output_required: "documentation"
+      steps:
+        - id: documentation-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Write technical documentation"
+            - kind: action
+              title: "Create user guides or README"
+            - kind: action
+              title: "Document known issues and limitations"
+            - kind: action
+              title: "Update project wiki or docs site"
+            - kind: action
+              title: "Record design decisions (ADRs if applicable)"
+            - kind: action
+              title: "Prepare demo materials"
 
-  - id: 5
-    title: "Review and handoff"
-    description: "Present milestone to stakeholders and prepare for next phase"
-    checklist:
-      - "Schedule review meeting with stakeholders"
-      - "Prepare presentation or demo"
-      - "Present completed work"
-      - "Gather feedback"
-      - "Create status report"
-      - "Document lessons learned"
-      - "Plan next steps"
-    estimated_time: "2-4 hours"
-    output_required: "status_report"
+    - id: review
+      kind: procedure
+      title: "Review and handoff"
+      description: "Present milestone to stakeholders and prepare for next phase"
+      estimated_time: "2-4 hours"
+      output_required: "status_report"
+      steps:
+        - id: review-checklist
+          kind: checklist
+          title: Checklist
+          items:
+            - kind: action
+              title: "Schedule review meeting with stakeholders"
+            - kind: action
+              title: "Prepare presentation or demo"
+            - kind: action
+              title: "Present completed work"
+            - kind: action
+              title: "Gather feedback"
+            - kind: action
+              title: "Create status report"
+            - kind: action
+              title: "Document lessons learned"
+            - kind: action
+              title: "Plan next steps"
 
 # Expected outputs/deliverables
 outputs:

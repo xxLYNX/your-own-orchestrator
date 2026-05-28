@@ -27,7 +27,7 @@ record_schema:
       description: "Notes"
       required: false
 
-composition:
+structure:
   id: root
   kind: procedure
   title: Workflow

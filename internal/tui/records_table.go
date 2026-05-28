@@ -42,7 +42,7 @@ type RecordsTableModel struct {
 	formCursor    int
 	searchInput   string
 	embedded      bool
-	repeatFilter  int // -1 = all scopes, >=0 filters to repeat_index
+	repeatStackFilter models.RepeatStack // nil = all scopes
 	err           error
 	quitting      bool
 }
@@ -62,13 +62,13 @@ func NewRecordsTableModel(db *sql.DB, noteID int64, records []*models.TemplateRe
 		viewMode:     ViewModeTable,
 		formData:     make(map[string]interface{}),
 		searchInput:  "",
-		repeatFilter: -1,
+		repeatStackFilter: nil,
 	}
 }
 
-// SetRepeatFilter scopes visible records (-1 = all, >=0 = repeat iteration).
-func (m *RecordsTableModel) SetRepeatFilter(repeatIndex int) {
-	m.repeatFilter = repeatIndex
+// SetRepeatFilter scopes visible records (nil = all scopes).
+func (m *RecordsTableModel) SetRepeatFilter(stack models.RepeatStack) {
+	m.repeatStackFilter = stack
 }
 
 // ReloadRecords replaces in-memory records (after DB reload).
@@ -490,8 +490,8 @@ func (m *RecordsTableModel) addRecord() {
 		Data:           m.copyFormData(),
 		Status:         "draft",
 	}
-	if m.repeatFilter >= 0 {
-		newRecord.RepeatIndex = m.repeatFilter
+	if m.repeatStackFilter != nil {
+		newRecord.RepeatStack = append(models.RepeatStack{}, m.repeatStackFilter...)
 	}
 
 	if m.db != nil {
@@ -534,7 +534,7 @@ func (m *RecordsTableModel) updateRecord() {
 // deleteRecord removes a record
 func (m *RecordsTableModel) deleteRecord(record *models.TemplateRecord) {
 	if m.db != nil {
-		if err := database.DeleteTemplateRecord(m.db, record.NoteTemplateID, record.RepeatIndex, record.RecordIndex); err != nil {
+		if err := database.DeleteTemplateRecord(m.db, record.NoteTemplateID, record.RepeatStack, record.RecordIndex); err != nil {
 			m.err = err
 			return
 		}
