@@ -1,0 +1,302 @@
+================================================================================
+                    STEPS VIEW - VISUAL DEMONSTRATION
+================================================================================
+
+--------------------------------------------------------------------------------
+                          MODE 1: MAIN STEPS LIST VIEW
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │               📋 Job Application Workflow Template                       │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ Progress: [████████████░░░░░░░░░░░░] 4/7 steps (57%)                        │
+│                                                                              │
+│   ☑ 1. Find job opportunities          ✓ Completed 2024-01-15              │
+│   ☑ 2. Research companies              ✓ Completed 2024-01-16              │
+│   ☑ 3. Prepare base resume             ✓ Completed 2024-01-17              │
+│ > ☐ 4. Customize applications                                               │
+│   ☐ 5. Submit applications                                                  │
+│   ☐ 6. Follow up                                                            │
+│   ☐ 7. Track responses                                                      │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ Selected: 4. Customize applications                                      │ │
+│ │ Tailor resume and cover letter for each role                             │ │
+│ │                                                                           │ │
+│ │ Checklist:                                                                │ │
+│ │   ☐ Review job description keywords                                      │ │
+│ │   ☐ Adjust resume to highlight relevant experience                       │ │
+│ │   ☐ Customize cover letter if required                                   │ │
+│ │   ☐ Update portfolio with relevant projects                              │ │
+│ │                                                                           │ │
+│ │ Estimated: 🕐 30-60 minutes per application                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ ↑/k: up • ↓/j: down • space/enter: toggle • n: add note • v: details •  │ │
+│ │ q/esc: quit                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                       MODE 2: DETAILED VIEW (Press 'v')
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ Step 4: Customize applications                                              │
+│                                                                              │
+│ ⏳ PENDING                                                                   │
+│                                                                              │
+│ Description                                                                  │
+│ ────────────                                                                 │
+│ Tailor your resume and cover letter for each specific role you're applying  │
+│ to. Highlight experience and skills that match the job requirements.        │
+│                                                                              │
+│ Checklist Items                                                              │
+│ ───────────────                                                              │
+│   ☐ Review job description keywords                                         │
+│   ☐ Adjust resume to highlight relevant experience                          │
+│   ☐ Customize cover letter if required                                      │
+│   ☐ Update portfolio with relevant projects                                 │
+│                                                                              │
+│ Estimated Time                                                               │
+│ ──────────────                                                               │
+│ 🕐 30-60 minutes per application                                             │
+│                                                                              │
+│ Output Required                                                              │
+│ ───────────────                                                              │
+│ → customized_resume                                                          │
+│                                                                              │
+│ Notes                                                                        │
+│ ─────                                                                        │
+│ (No notes yet. Press 'n' to add a note)                                     │
+│                                                                              │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ v: back to list • space: toggle completion • n: add/edit note •          │ │
+│ │ esc/q: exit                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                    MODE 3: NOTE INPUT MODE (Press 'n')
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ Add Note to Step 4                                                           │
+│                                                                              │
+│ Customize applications                                                       │
+│                                                                              │
+│ Note:                                                                        │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ Remember to emphasize Go experience and distributed systems. Also        │ │
+│ │ highlight work with Kubernetes and microservices.█                       │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ enter: save • ctrl+u: clear • ctrl+w: delete word • esc: cancel             │
+│                                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                    MODE 4: WITH COMPLETED STEP & NOTES
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │               📋 Job Application Workflow Template                       │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ Progress: [████████████████░░░░░░░░] 5/7 steps (71%)                        │
+│                                                                              │
+│   ☑ 1. Find job opportunities          ✓ Completed 2024-01-15              │
+│   ☑ 2. Research companies              ✓ Completed 2024-01-16              │
+│   ☑ 3. Prepare base resume             ✓ Completed 2024-01-17              │
+│   ☑ 4. Customize applications          ✓ Completed 2024-01-18              │
+│ > ☐ 5. Submit applications                                                  │
+│   ☐ 6. Follow up                                                            │
+│   ☐ 7. Track responses                                                      │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ Selected: 5. Submit applications                                         │ │
+│ │ Submit your application through the company's portal or via email        │ │
+│ │                                                                           │ │
+│ │ Checklist:                                                                │ │
+│ │   ☐ Double-check all materials are correct                               │ │
+│ │   ☐ Submit through company portal                                        │ │
+│ │   ☐ Send confirmation email if applicable                                │ │
+│ │   ☐ Save confirmation number/receipt                                     │ │
+│ │                                                                           │ │
+│ │ Estimated: 🕐 10-15 minutes per application                               │ │
+│ │                                                                           │ │
+│ │ Notes:                                                                    │ │
+│ │   Applied to Acme Corp via their careers portal. Confirmation #12345.    │ │
+│ │   Also sent follow-up email to hiring manager.                           │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ ↑/k: up • ↓/j: down • space/enter: toggle • n: add note • v: details •  │ │
+│ │ q/esc: quit                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                    MODE 5: DETAILED VIEW WITH COMPLETION
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                                                                              │
+│ Step 4: Customize applications                                              │
+│                                                                              │
+│ ✓ COMPLETED                                                                  │
+│                                                                              │
+│ Description                                                                  │
+│ ────────────                                                                 │
+│ Tailor your resume and cover letter for each specific role you're applying  │
+│ to. Highlight experience and skills that match the job requirements.        │
+│                                                                              │
+│ Checklist Items                                                              │
+│ ───────────────                                                              │
+│   ☐ Review job description keywords                                         │
+│   ☐ Adjust resume to highlight relevant experience                          │
+│   ☐ Customize cover letter if required                                      │
+│   ☐ Update portfolio with relevant projects                                 │
+│                                                                              │
+│ Estimated Time                                                               │
+│ ──────────────                                                               │
+│ 🕐 30-60 minutes per application                                             │
+│                                                                              │
+│ Output Required                                                              │
+│ ───────────────                                                              │
+│ → customized_resume                                                          │
+│                                                                              │
+│ Notes                                                                        │
+│ ─────                                                                        │
+│ Remember to emphasize Go experience and distributed systems. Also highlight │
+│ work with Kubernetes and microservices. Updated resume to showcase recent   │
+│ work on high-throughput API design.                                         │
+│                                                                              │
+│ Completed                                                                    │
+│ ─────────                                                                    │
+│ 📅 January 18, 2024 at 14:30                                                 │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ v: back to list • space: toggle completion • n: add/edit note •          │ │
+│ │ esc/q: exit                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                          MODE 6: ALL STEPS COMPLETED
+--------------------------------------------------------------------------------
+
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │               📋 Job Application Workflow Template                       │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ Progress: [████████████████████████] 7/7 steps (100%)                       │
+│                                                                              │
+│   ☑ 1. Find job opportunities          ✓ Completed 2024-01-15              │
+│   ☑ 2. Research companies              ✓ Completed 2024-01-16              │
+│   ☑ 3. Prepare base resume             ✓ Completed 2024-01-17              │
+│   ☑ 4. Customize applications          ✓ Completed 2024-01-18              │
+│   ☑ 5. Submit applications             ✓ Completed 2024-01-19              │
+│   ☑ 6. Follow up                       ✓ Completed 2024-01-22              │
+│ > ☑ 7. Track responses                 ✓ Completed 2024-01-25              │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ Selected: 7. Track responses                                             │ │
+│ │ Monitor application status and responses from companies                  │ │
+│ │                                                                           │ │
+│ │ Checklist:                                                                │ │
+│ │   ☐ Check email daily for responses                                      │ │
+│ │   ☐ Update tracking spreadsheet                                          │ │
+│ │   ☐ Prepare for any scheduled interviews                                 │ │
+│ │                                                                           │ │
+│ │ Estimated: 🕐 5-10 minutes daily                                          │ │
+│ │                                                                           │ │
+│ │ Notes:                                                                    │ │
+│ │   Got response from Acme Corp - interview scheduled for Jan 28!          │ │
+│ │   Still waiting on TechStart Inc and Global Systems.                     │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ ↑/k: up • ↓/j: down • space/enter: toggle • n: add note • v: details •  │ │
+│ │ q/esc: quit                                                               │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+
+--------------------------------------------------------------------------------
+                              COLOR REFERENCE
+--------------------------------------------------------------------------------
+
+The actual TUI uses the following color scheme:
+
+Primary Color:   #7D56F4 (Purple) - Headers, highlights, cursor
+Success Color:   #04B575 (Green)  - Completed items, checkmarks, progress
+Warning Color:   #F59E0B (Orange) - Pending status, notes
+Muted Color:     #666666 (Gray)   - Help text, timestamps
+Subtle Color:    #999999 (L-Gray) - Descriptions, secondary text
+Border Color:    #444444 (D-Gray) - Borders and dividers
+
+Icons Used:
+✓ ☑ - Completed checkbox
+○ ☐ - Unchecked checkbox
+> - Cursor/selection indicator
+→ - Arrow/output indicator
+📋 - Template/checklist icon
+🕐 - Time/duration icon
+📅 - Date icon
+⏳ - Pending status
+▶ - In progress status
+
+
+--------------------------------------------------------------------------------
+                          INTERACTION EXAMPLES
+--------------------------------------------------------------------------------
+
+1. TOGGLE STEP COMPLETION
+   - Position cursor on step using ↑/↓ or j/k
+   - Press Space or Enter
+   - Step immediately marks as complete/incomplete
+   - Progress bar updates in real-time
+   - Completion timestamp added/removed
+
+2. ADD NOTE TO STEP
+   - Position cursor on desired step
+   - Press 'n' to enter note mode
+   - Type your note (existing note pre-populated)
+   - Press Enter to save, Esc to cancel
+   - Note appears in step details panel
+
+3. VIEW DETAILED INFORMATION
+   - Position cursor on any step
+   - Press 'v' to toggle detailed view
+   - See full description, checklist, times, notes
+   - Press 'v' again or Esc to return to list
+
+4. NAVIGATE STEPS
+   - Use arrow keys (↑/↓) or vim keys (j/k)
+   - Cursor wraps at top/bottom
+   - Selected step details update automatically
+   - Strikethrough applied to completed steps
+
+5. EXIT VIEW
+   - Press 'q' or Esc to quit
+   - All changes are auto-saved to database
+   - Returns to previous view/terminal
+
+
+================================================================================
+                              END OF DEMO
+================================================================================
