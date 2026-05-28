@@ -265,6 +265,46 @@ BEGIN
 END;
 `,
 	},
+	{
+		Version:     4,
+		Name:        "add_note_shape_state",
+		Description: "Add shape-path keyed runtime state for fractal template instances",
+		Up: `
+CREATE TABLE IF NOT EXISTS note_shape_state (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    note_template_id INTEGER NOT NULL,
+    shape_path TEXT NOT NULL,
+    repeat_index INTEGER NOT NULL DEFAULT 0,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    completed BOOLEAN DEFAULT 0,
+    completed_at DATETIME,
+    notes TEXT,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (note_template_id) REFERENCES note_templates(id) ON DELETE CASCADE,
+    UNIQUE(note_template_id, shape_path, repeat_index)
+);
+
+CREATE INDEX IF NOT EXISTS idx_note_shape_state_template ON note_shape_state(note_template_id);
+CREATE INDEX IF NOT EXISTS idx_note_shape_state_scope ON note_shape_state(note_template_id, repeat_index);
+CREATE INDEX IF NOT EXISTS idx_note_shape_state_path ON note_shape_state(note_template_id, shape_path);
+
+CREATE TRIGGER IF NOT EXISTS update_note_shape_state_timestamp
+AFTER UPDATE ON note_shape_state
+BEGIN
+    UPDATE note_shape_state SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+`,
+		Down: `
+DROP TRIGGER IF EXISTS update_note_shape_state_timestamp;
+DROP INDEX IF EXISTS idx_note_shape_state_path;
+DROP INDEX IF EXISTS idx_note_shape_state_scope;
+DROP INDEX IF EXISTS idx_note_shape_state_template;
+DROP TABLE IF EXISTS note_shape_state;
+`,
+	},
 }
 
 // initMigrationsTable creates the migrations tracking table

@@ -27,6 +27,13 @@ type StepsViewModel struct {
 	width          int
 	height         int
 	embedded       bool
+	scopePath      []string
+	repeatIndex    int
+	scopeNode      *models.ShapeNode
+	checklistNode  *models.ShapeNode
+	shapeState     *models.ShapeState
+	checklistItems []models.ChecklistItemView
+	useShapeState  bool
 	err            error
 	quitting       bool
 }
@@ -68,6 +75,59 @@ func ShowSteps(db *sql.DB, noteID int64, noteTemplateID int64, template *models.
 // IsCapturingInput reports whether keyboard input should go to this view exclusively.
 func (m *StepsViewModel) IsCapturingInput() bool {
 	return m.addingNote || m.showingDetails
+}
+
+// SetScope loads checklist or step state for the current composition node.
+func (m *StepsViewModel) SetScope(path []string, repeatIndex int, node *models.ShapeNode) error {
+	m.scopePath = append([]string{}, path...)
+	m.repeatIndex = repeatIndex
+	m.scopeNode = node
+	m.useShapeState = false
+	m.checklistItems = nil
+	m.shapeState = nil
+	m.checklistNode = nil
+	m.cursor = 0
+
+	if node == nil {
+		steps, err := database.ListNoteSteps(m.db, m.noteTemplateID)
+		if err != nil {
+			return err
+		}
+		m.steps = steps
+		return nil
+	}
+
+	comp, err := m.template.Definition.GetComposition()
+	if err != nil {
+		return err
+	}
+
+	if checklist := node.FindFirstChecklist(); checklist != nil {
+		ids := comp.PathTo(checklist.ID)
+		if len(ids) == 0 {
+			return fmt.Errorf("checklist not found in composition tree")
+		}
+		shapePath := models.ShapePath(ids)
+		state, err := database.GetShapeState(m.db, m.noteTemplateID, shapePath, repeatIndex)
+		if err != nil {
+			return err
+		}
+		if state == nil {
+			return fmt.Errorf("checklist state not initialized for %s", shapePath)
+		}
+		m.shapeState = state
+		m.checklistNode = checklist
+		m.checklistItems = models.ChecklistItemsFromState(checklist, state)
+		m.useShapeState = true
+		return nil
+	}
+
+	steps, err := database.ListNoteSteps(m.db, m.noteTemplateID)
+	if err != nil {
+		return err
+	}
+	m.steps = steps
+	return nil
 }
 
 // SetEmbedded configures compact rendering for use inside the templated note view.
@@ -128,16 +188,14 @@ func (m StepsViewModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case "down", "j":
-		if m.cursor < len(m.steps)-1 {
+		if m.cursor < m.rowCount()-1 {
 			m.cursor++
 			m.showingDetails = false
 		}
 
 	case "enter", " ":
-		// Toggle step completion
-		if len(m.steps) > 0 && m.cursor < len(m.steps) {
-			step := m.steps[m.cursor]
-			if err := m.toggleStepCompletion(step); err != nil {
+		if m.rowCount() > 0 && m.cursor < m.rowCount() {
+			if err := m.toggleRow(m.cursor); err != nil {
 				m.err = err
 			}
 		}
@@ -210,6 +268,31 @@ func (m StepsViewModel) handleNoteInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *StepsViewModel) rowCount() int {
+	if m.useShapeState {
+		return len(m.checklistItems)
+	}
+	return len(m.steps)
+}
+
+func (m *StepsViewModel) toggleRow(index int) error {
+	if m.useShapeState {
+		if index < 0 || index >= len(m.checklistItems) {
+			return nil
+		}
+		item := m.checklistItems[index]
+		if err := database.ToggleChecklistItem(m.db, m.shapeState, item.ItemID, !item.Completed); err != nil {
+			return err
+		}
+		m.checklistItems = models.ChecklistItemsFromState(m.checklistNode, m.shapeState)
+		return nil
+	}
+	if index < 0 || index >= len(m.steps) {
+		return nil
+	}
+	return m.toggleStepCompletion(m.steps[index])
+}
+
 // toggleStepCompletion toggles the completion status of a step
 func (m *StepsViewModel) toggleStepCompletion(step *models.StepInstance) error {
 	if step.Completed {
@@ -273,7 +356,7 @@ func (m StepsViewModel) renderStepsView() string {
 	s.WriteString("\n")
 
 	// Selected step details (compact when embedded to avoid viewport overflow)
-	if len(m.steps) > 0 && m.cursor < len(m.steps) {
+	if m.rowCount() > 0 && m.cursor < m.rowCount() {
 		if m.embedded {
 			s.WriteString(m.renderCompactStepPreview())
 		} else {
@@ -295,11 +378,19 @@ func (m StepsViewModel) renderProgressBar() string {
 	var s strings.Builder
 
 	completedCount := 0
-	totalCount := len(m.steps)
+	totalCount := m.rowCount()
 
-	for _, step := range m.steps {
-		if step.Completed {
-			completedCount++
+	if m.useShapeState {
+		for _, item := range m.checklistItems {
+			if item.Completed {
+				completedCount++
+			}
+		}
+	} else {
+		for _, step := range m.steps {
+			if step.Completed {
+				completedCount++
+			}
 		}
 	}
 
@@ -320,15 +411,60 @@ func (m StepsViewModel) renderProgressBar() string {
 	s.WriteString(" ")
 
 	// Progress text
-	progressText := ProgressPercentStyle.Render(fmt.Sprintf("%d/%d steps (%d%%)", completedCount, totalCount, percentage))
+	progressText := ProgressPercentStyle.Render(fmt.Sprintf("%d/%d items (%d%%)", completedCount, totalCount, percentage))
 	s.WriteString(progressText)
 
 	return s.String()
 }
 
-// renderStepsList renders the list of all steps
+// renderStepsList renders the list of all steps or scoped checklist items
 func (m StepsViewModel) renderStepsList() string {
 	var s strings.Builder
+
+	if m.useShapeState {
+		for i, item := range m.checklistItems {
+			cursor := "  "
+			if i == m.cursor {
+				cursor = Cursor() + " "
+			}
+
+			checkbox := Checkbox(item.Completed)
+
+			var titleStyle lipgloss.Style
+			if item.Completed {
+				titleStyle = ListItemCompletedStyle
+			} else if i == m.cursor {
+				titleStyle = lipgloss.NewStyle().Foreground(ColorPrimary).Bold(true)
+			} else {
+				titleStyle = ListItemStyle
+			}
+
+			title := titleStyle.Render(item.Title)
+			line := fmt.Sprintf("%s%s %s", cursor, checkbox, title)
+
+			if i == m.cursor {
+				plainCheck := "☐"
+				if item.Completed {
+					plainCheck = "☑"
+				}
+				plainLine := fmt.Sprintf("> %s %s", plainCheck, item.Title)
+				pad := ""
+				if m.width > 2 {
+					target := m.width - 2
+					if w := lipgloss.Width(plainLine); w < target {
+						pad = strings.Repeat(" ", target-w)
+					}
+				}
+				line = lipgloss.NewStyle().
+					Background(lipgloss.Color("#2A2A2A")).
+					Render(line + pad)
+			}
+
+			s.WriteString(line)
+			s.WriteString("\n")
+		}
+		return s.String()
+	}
 
 	for i, step := range m.steps {
 		cursor := "  "
@@ -397,6 +533,25 @@ func (m StepsViewModel) renderStepsList() string {
 
 // renderCompactStepPreview renders a short preview when embedded in the templated note tab.
 func (m StepsViewModel) renderCompactStepPreview() string {
+	if m.rowCount() == 0 || m.cursor >= m.rowCount() {
+		return ""
+	}
+
+	if m.useShapeState {
+		item := m.checklistItems[m.cursor]
+		var s strings.Builder
+		header := SectionHeaderStyle.Render("Selected: " + item.Title)
+		s.WriteString(header)
+		s.WriteString("\n")
+		if m.scopeNode != nil && m.scopeNode.Description != "" {
+			desc := lipgloss.NewStyle().Foreground(ColorSubtle).Italic(true).Render(m.scopeNode.Description)
+			s.WriteString(desc)
+			s.WriteString("\n")
+		}
+		s.WriteString(HelpStyle.Render("space: toggle • esc: back"))
+		return s.String()
+	}
+
 	if len(m.steps) == 0 || m.cursor >= len(m.steps) {
 		return ""
 	}

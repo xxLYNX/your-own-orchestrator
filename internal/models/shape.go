@@ -408,6 +408,37 @@ func (n *ShapeNode) FindLogNodeInSubtree() *ShapeNode {
 	return nil
 }
 
+// PathTo returns the ID path from this node to targetID, or nil if not found.
+func (n *ShapeNode) PathTo(targetID string) []string {
+	if n == nil {
+		return nil
+	}
+	var walk func(node *ShapeNode, path []string) []string
+	walk = func(node *ShapeNode, path []string) []string {
+		current := append(append([]string{}, path...), node.ID)
+		if node.ID == targetID {
+			return current
+		}
+		for i := range node.Steps {
+			if found := walk(&node.Steps[i], current); found != nil {
+				return found
+			}
+		}
+		for i := range node.Items {
+			if found := walk(&node.Items[i], current); found != nil {
+				return found
+			}
+		}
+		if node.RepeatBody != nil {
+			if found := walk(node.RepeatBody, current); found != nil {
+				return found
+			}
+		}
+		return nil
+	}
+	return walk(n, nil)
+}
+
 func (n *ShapeNode) ResolveRepeatCount(inputs map[string]interface{}) int {
 	if n == nil || n.RepeatCount == "" {
 		return 0

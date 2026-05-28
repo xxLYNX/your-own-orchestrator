@@ -254,6 +254,18 @@ func AttachTemplateToNote(db *sql.DB, noteID int64, templateID int64, instance *
 		}
 	}
 
+	template, err := GetTemplateByID(db, templateID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load template for shape state: %w", err)
+	}
+	comp, err := template.Definition.GetComposition()
+	if err != nil {
+		return nil, err
+	}
+	if err := InitializeShapeStates(db, id, comp, instance.Inputs); err != nil {
+		return nil, fmt.Errorf("failed to initialize shape states: %w", err)
+	}
+
 	return noteTemplate, nil
 }
 

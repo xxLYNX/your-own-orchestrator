@@ -96,11 +96,17 @@ func (m *OrchestratorModel) initChildPanels() error {
 	}
 
 	if m.template.Definition.HasProcedureShape() {
+		if err := database.BackfillShapeStatesIfMissing(m.db, m.noteTemplate.ID, m.template, m.inputs); err != nil {
+			return err
+		}
 		stepsModel, err := NewStepsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template)
 		if err != nil {
 			return err
 		}
 		stepsModel.SetEmbedded(true)
+		if err := stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatIndex, m.currentNode()); err != nil {
+			return err
+		}
 		m.stepsModel = stepsModel
 	}
 
@@ -266,6 +272,10 @@ func (m *OrchestratorModel) handleInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "p":
 		if m.stepsModel != nil {
+			if err := m.refreshStepsScope(); err != nil {
+				m.err = err
+				return m, nil
+			}
 			m.panelMode = "steps"
 		}
 	case "f":
@@ -316,6 +326,10 @@ func (m *OrchestratorModel) drillIntoSelection() {
 	case models.ShapeRepeat:
 		count := node.ResolveRepeatCount(m.inputs)
 		if m.cursor < 0 || m.cursor >= count || node.RepeatBody == nil {
+			return
+		}
+		if err := database.EnsureRepeatScope(m.db, m.noteTemplate.ID, m.composition, node, m.cursor+1, m.inputs); err != nil {
+			m.err = err
 			return
 		}
 		nav := m.currentNav()
@@ -372,6 +386,13 @@ func (m *OrchestratorModel) refreshRecords() error {
 	m.recordsModel.SetRepeatFilter(scope)
 	m.recordsModel.ReloadRecords(records)
 	return nil
+}
+
+func (m *OrchestratorModel) refreshStepsScope() error {
+	if m.stepsModel == nil {
+		return nil
+	}
+	return m.stepsModel.SetScope(m.currentNav().Path, m.currentNav().RepeatIndex, m.currentNode())
 }
 
 func (m *OrchestratorModel) View() string {
