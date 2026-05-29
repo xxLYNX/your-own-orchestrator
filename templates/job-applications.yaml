@@ -173,11 +173,22 @@ structure:
                 - name: "notes"
                   type: "text"
                   required: false
+            - id: confirm-logged
+              kind: action
+              title: Confirm application record is complete
+              depends_on:
+                - target: application-log
+                  requirement: has_record
+                  scope: same_repeat_context
 
     - id: wrapup
       kind: procedure
       title: Wrap up
       description: Review progress and export your application log
+      depends_on:
+        - target: application-log
+          requirement: has_record
+          scope: all_occurrences
       steps:
         - id: wrapup-checklist
           kind: checklist

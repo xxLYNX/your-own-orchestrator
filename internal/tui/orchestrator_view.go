@@ -84,7 +84,7 @@ func (m *OrchestratorModel) initChildPanels() error {
 		if err := database.EnsureShapeStates(m.db, m.noteTemplate.ID, m.template, m.inputs); err != nil {
 			return err
 		}
-		stepsModel, err := NewStepsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template)
+		stepsModel, err := NewStepsViewModel(m.db, m.noteID, m.noteTemplate.ID, m.template, m.inputs)
 		if err != nil {
 			return err
 		}

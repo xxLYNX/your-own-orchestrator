@@ -57,7 +57,11 @@ func setStepCompletion(noteID int64, stepNumber int, completed bool) error {
 			}
 			return nil
 		}
-		if err := database.ToggleShapeComplete(db.Conn(), state, completed); err != nil {
+		runtime, err := database.LoadShapeRuntime(db.Conn(), ctx.NoteTemplate.ID, ctx.Template, ctx.NoteTemplate.TemplateData.Inputs)
+		if err != nil {
+			return err
+		}
+		if err := database.ToggleShapeComplete(db.Conn(), runtime, state, completed); err != nil {
 			return err
 		}
 		icon := "○"

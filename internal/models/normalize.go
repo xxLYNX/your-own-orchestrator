@@ -115,6 +115,9 @@ func ValidateDependencySpecs(node *ShapeNode) error {
 		if dep.Requirement == "" {
 			return fmt.Errorf("shape %q dependency missing requirement", node.ID)
 		}
+		if !dep.Requirement.IsValid() {
+			return fmt.Errorf("shape %q dependency has unknown requirement %q", node.ID, dep.Requirement)
+		}
 		if dep.Target.ShapeID == "" && dep.Target.ShapePath == "" && dep.Target.NoteAlias == "" && dep.Target.NoteID == nil {
 			return fmt.Errorf("shape %q dependency missing target", node.ID)
 		}

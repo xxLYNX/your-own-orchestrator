@@ -19,6 +19,8 @@ type StepsViewModel struct {
 	noteTemplateID int64
 	steps          []*models.ShapeState
 	template       *models.Template
+	inputs         map[string]interface{}
+	runtime        *database.ShapeRuntime
 	cursor         int
 	showingDetails bool
 	addingNote     bool
@@ -38,10 +40,15 @@ type StepsViewModel struct {
 }
 
 // NewStepsViewModel creates a new steps view model
-func NewStepsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template) (*StepsViewModel, error) {
+func NewStepsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, template *models.Template, inputs map[string]interface{}) (*StepsViewModel, error) {
 	steps, err := database.ListTopLevelProcedureStates(db, noteTemplateID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load procedure states: %w", err)
+	}
+
+	runtime, err := database.LoadShapeRuntime(db, noteTemplateID, template, inputs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load shape runtime: %w", err)
 	}
 
 	return &StepsViewModel{
@@ -50,6 +57,8 @@ func NewStepsViewModel(db *sql.DB, noteID int64, noteTemplateID int64, template 
 		noteTemplateID: noteTemplateID,
 		steps:          steps,
 		template:       template,
+		inputs:         inputs,
+		runtime:        runtime,
 		cursor:         0,
 		showingDetails: false,
 		addingNote:     false,
@@ -74,6 +83,10 @@ func (m *StepsViewModel) SetScope(path []string, stack models.RepeatStack, node 
 	m.shapeState = nil
 	m.checklistNode = nil
 	m.cursor = 0
+
+	if err := m.refreshRuntime(); err != nil {
+		return err
+	}
 
 	if node == nil {
 		steps, err := database.ListTopLevelProcedureStates(m.db, m.noteTemplateID)
@@ -115,6 +128,22 @@ func (m *StepsViewModel) SetScope(path []string, stack models.RepeatStack, node 
 	}
 	m.steps = steps
 	return nil
+}
+
+func (m *StepsViewModel) refreshRuntime() error {
+	runtime, err := database.LoadShapeRuntime(m.db, m.noteTemplateID, m.template, m.inputs)
+	if err != nil {
+		return err
+	}
+	m.runtime = runtime
+	return nil
+}
+
+func (m *StepsViewModel) isStateBlocked(state *models.ShapeState) bool {
+	if m.runtime == nil || state == nil {
+		return false
+	}
+	return m.runtime.IsBlocked(state)
 }
 
 // SetEmbedded configures compact rendering for use inside the templated note view.
@@ -267,7 +296,7 @@ func (m *StepsViewModel) toggleRow(index int) error {
 			return nil
 		}
 		item := m.checklistItems[index]
-		if err := database.ToggleChecklistItem(m.db, m.shapeState, item.ItemID, !item.Completed); err != nil {
+		if err := database.ToggleChecklistItem(m.db, m.runtime, m.shapeState, item.ItemID, !item.Completed); err != nil {
 			return err
 		}
 		m.checklistItems = models.ChecklistItemsFromState(m.checklistNode, m.shapeState)
@@ -320,7 +349,7 @@ func (m StepsViewModel) HasChecklist() bool {
 
 // toggleStepCompletion toggles the completion status of a procedure shape state.
 func (m *StepsViewModel) toggleStepCompletion(state *models.ShapeState) error {
-	return database.ToggleShapeComplete(m.db, state, !state.Completed)
+	return database.ToggleShapeComplete(m.db, m.runtime, state, !state.Completed)
 }
 
 // View renders the TUI
@@ -437,6 +466,9 @@ func (m StepsViewModel) renderStepsList() string {
 			}
 
 			checkbox := Checkbox(item.Completed)
+			if !item.Completed && m.isStateBlocked(m.shapeState) {
+				checkbox = lipgloss.NewStyle().Foreground(ColorWarning).Render("🔒")
+			}
 
 			var titleStyle lipgloss.Style
 			if item.Completed {
@@ -481,6 +513,9 @@ func (m StepsViewModel) renderStepsList() string {
 		}
 
 		checkbox := Checkbox(state.Completed)
+		if !state.Completed && m.isStateBlocked(state) {
+			checkbox = lipgloss.NewStyle().Foreground(ColorWarning).Render("🔒")
+		}
 
 		stepNum := lipgloss.NewStyle().
 			Foreground(ColorSubtle).
@@ -556,6 +591,10 @@ func (m StepsViewModel) renderCompactStepPreview() string {
 			s.WriteString(desc)
 			s.WriteString("\n")
 		}
+		if m.isStateBlocked(m.shapeState) {
+			s.WriteString(WarningMessageStyle.Render("🔒 Blocked — complete dependencies first"))
+			s.WriteString("\n")
+		}
 		s.WriteString(HelpStyle.Render("space: toggle • esc: back"))
 		return s.String()
 	}
@@ -577,6 +616,10 @@ func (m StepsViewModel) renderCompactStepPreview() string {
 			Italic(true).
 			Render(node.Description)
 		s.WriteString(desc)
+		s.WriteString("\n")
+	}
+	if m.isStateBlocked(state) {
+		s.WriteString(WarningMessageStyle.Render("🔒 Blocked — complete dependencies first"))
 		s.WriteString("\n")
 	}
 

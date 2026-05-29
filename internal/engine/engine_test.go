@@ -91,7 +91,7 @@ func TestDependencyBlocksUntilComplete(t *testing.T) {
 	})
 
 	states := []*models.ShapeState{}
-	blockers := engine.FindBlockers(root, states, nil)
+	blockers := engine.FindBlockers(root, states, nil, engine.EvalContext{})
 	if len(blockers) != 1 {
 		t.Fatalf("expected one blocker, got %d", len(blockers))
 	}

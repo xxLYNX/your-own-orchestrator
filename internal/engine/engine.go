@@ -87,7 +87,7 @@ type Blocker struct {
 }
 
 // FindBlockers returns dependencies not yet satisfied for instances under root.
-func FindBlockers(root *models.ShapeNode, states []*models.ShapeState, inputs map[string]interface{}) []Blocker {
+func FindBlockers(root *models.ShapeNode, states []*models.ShapeState, inputs map[string]interface{}, eval EvalContext) []Blocker {
 	if root == nil {
 		return nil
 	}
@@ -96,7 +96,7 @@ func FindBlockers(root *models.ShapeNode, states []*models.ShapeState, inputs ma
 
 	models.WalkOccurrences(root, nil, nil, inputs, func(node *models.ShapeNode, currentPath []string, iterStack models.RepeatStack) {
 		for _, dep := range node.DependsOn {
-			if !dependencySatisfied(root, index, dep, iterStack, inputs) {
+			if !dependencySatisfied(root, index, dep, iterStack, inputs, eval) {
 				blockers = append(blockers, Blocker{
 					ShapeID:     node.ID,
 					ShapePath:   models.ShapePath(currentPath),
@@ -117,13 +117,20 @@ func indexStatesByPath(states []*models.ShapeState) map[string][]*models.ShapeSt
 	return index
 }
 
-func dependencySatisfied(root *models.ShapeNode, index map[string][]*models.ShapeState, dep models.DependencySpec, stack models.RepeatStack, inputs map[string]interface{}) bool {
+func dependencySatisfied(root *models.ShapeNode, index map[string][]*models.ShapeState, dep models.DependencySpec, stack models.RepeatStack, inputs map[string]interface{}, eval EvalContext) bool {
 	targetID := dep.Target.ShapeID
 	if targetID == "" && dep.Target.ShapePath != "" {
 		targetID = dep.Target.ShapePath
 	}
 	if targetID == "" {
 		return true
+	}
+
+	switch dep.Requirement {
+	case models.RequirementHasRecord:
+		return recordRequirementMet(root, dep, stack, inputs, eval)
+	case models.RequirementHasArtifact:
+		return eval.ArtifactCount > 0
 	}
 
 	target := root.FindByPath(root.PathTo(targetID))
@@ -149,36 +156,47 @@ func dependencySatisfied(root *models.ShapeNode, index map[string][]*models.Shap
 	case models.ScopeAllOccurrences, models.ScopeAllOccurrencesInSameParent:
 		count := target.EffectiveRepeatCount(inputs)
 		if count <= 1 {
-			return instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, stack.ParentContext()))
+			return instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, stack.ParentContext()), eval, stack)
 		}
 		for i := 1; i <= count; i++ {
 			ctx := stack.ParentContext().WithFrame(target.ID, i)
-			if !instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, ctx)) {
+			if !instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, ctx), eval, stack) {
 				return false
 			}
 		}
 		return true
 	case models.ScopeAnyOccurrence:
 		for _, state := range candidates {
-			if instanceRequirementMet(dep.Requirement, state) {
+			if instanceRequirementMet(dep.Requirement, state, eval, stack) {
 				return true
 			}
 		}
 		return false
 	default:
-		return instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, stack))
+		return instanceRequirementMet(dep.Requirement, models.FindStateByStack(candidates, stack), eval, stack)
 	}
 }
 
-func instanceRequirementMet(req models.DependencyRequirement, state *models.ShapeState) bool {
+func instanceRequirementMet(req models.DependencyRequirement, state *models.ShapeState, eval EvalContext, stack models.RepeatStack) bool {
 	if state == nil {
-		return false
+		switch req {
+		case models.RequirementHasRecord:
+			return eval.HasRecordInStack(stack)
+		case models.RequirementHasArtifact:
+			return eval.ArtifactCount > 0
+		default:
+			return false
+		}
 	}
 	switch req {
 	case models.RequirementCompleted, "":
-		return state.Completed || state.Status == models.StatusComplete
+		return state.Completed || state.Status == models.StatusComplete || state.Status == models.StatusSkipped
 	case models.RequirementStarted:
-		return state.Status == models.StatusInProgress || state.Completed
+		return state.Status == models.StatusInProgress || state.Completed || state.Status == models.StatusComplete
+	case models.RequirementHasRecord:
+		return eval.HasRecordInStack(stack)
+	case models.RequirementHasArtifact:
+		return eval.ArtifactCount > 0
 	default:
 		return state.Completed
 	}

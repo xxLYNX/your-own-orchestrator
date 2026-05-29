@@ -275,7 +275,14 @@ func UpdateShapeState(db *sql.DB, state *models.ShapeState) error {
 }
 
 // ToggleChecklistItem updates one checklist item and auto-completes the parent when all items are done.
-func ToggleChecklistItem(db *sql.DB, state *models.ShapeState, itemID string, completed bool) error {
+func ToggleChecklistItem(db *sql.DB, runtime *ShapeRuntime, state *models.ShapeState, itemID string, completed bool) error {
+	if completed {
+		if runtime != nil {
+			if err := runtime.EnsureUnblocked(state); err != nil {
+				return err
+			}
+		}
+	}
 	if state.Data.ItemCompletion == nil {
 		state.Data.ItemCompletion = map[string]bool{}
 	}
@@ -293,6 +300,9 @@ func ToggleChecklistItem(db *sql.DB, state *models.ShapeState, itemID string, co
 	}
 	if err := syncParentProcedureFromChecklist(db, state); err != nil {
 		return err
+	}
+	if runtime != nil {
+		return runtime.Refresh(db)
 	}
 	return nil
 }
@@ -318,14 +328,27 @@ func syncParentProcedureFromChecklist(db *sql.DB, checklistState *models.ShapeSt
 }
 
 // ToggleShapeComplete sets completion on a procedure or action shape state.
-func ToggleShapeComplete(db *sql.DB, state *models.ShapeState, completed bool) error {
+func ToggleShapeComplete(db *sql.DB, runtime *ShapeRuntime, state *models.ShapeState, completed bool) error {
+	if completed {
+		if runtime != nil {
+			if err := runtime.EnsureUnblocked(state); err != nil {
+				return err
+			}
+		}
+	}
 	state.Completed = completed
 	if completed {
 		state.Status = models.StatusComplete
 	} else {
 		state.Status = models.StatusInProgress
 	}
-	return UpdateShapeState(db, state)
+	if err := UpdateShapeState(db, state); err != nil {
+		return err
+	}
+	if runtime != nil {
+		return runtime.Refresh(db)
+	}
+	return nil
 }
 
 // UpdateShapeNotes persists notes on a shape state row.

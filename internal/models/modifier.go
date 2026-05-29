@@ -20,9 +20,17 @@ const (
 	RequirementStarted     DependencyRequirement = "started"
 	RequirementHasRecord   DependencyRequirement = "has_record"
 	RequirementHasArtifact DependencyRequirement = "has_artifact"
-	RequirementApproved    DependencyRequirement = "approved"
-	RequirementNotFailed   DependencyRequirement = "not_failed"
 )
+
+// IsValid reports whether the requirement is supported by the engine.
+func (r DependencyRequirement) IsValid() bool {
+	switch r {
+	case RequirementCompleted, RequirementStarted, RequirementHasRecord, RequirementHasArtifact:
+		return true
+	default:
+		return false
+	}
+}
 
 // DependencyScope disambiguates dependency matching under repeats.
 type DependencyScope string

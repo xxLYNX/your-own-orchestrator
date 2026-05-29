@@ -52,6 +52,11 @@ var stepListCmd = &cobra.Command{
 			}
 
 			fmt.Printf("Procedures for: %s\n\n", ctx.Note.Title)
+			runtime, err := database.LoadShapeRuntime(db.Conn(), ctx.NoteTemplate.ID, ctx.Template, ctx.NoteTemplate.TemplateData.Inputs)
+			if err != nil {
+				return fmt.Errorf("failed to load shape runtime: %w", err)
+			}
+
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 			_, _ = fmt.Fprintln(w, "STATUS\tSTEP\tTITLE\tCOMPLETED")
 			_, _ = fmt.Fprintln(w, "------\t----\t-----\t---------")
@@ -59,10 +64,14 @@ var stepListCmd = &cobra.Command{
 			done := 0
 			for i, state := range states {
 				status := "○"
-				completedAt := ""
-				if state.Completed {
+				if runtime.IsBlocked(state) {
+					status = "🔒"
+				} else if state.Completed {
 					status = "✓"
 					done++
+				}
+				completedAt := ""
+				if state.Completed {
 					if state.CompletedAt != nil {
 						completedAt = *state.CompletedAt
 					}

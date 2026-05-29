@@ -31,6 +31,78 @@ Navigate with **enter** (drill in), **esc** (up/back), **l** (log panel), **p** 
 
 ---
 
+## Terminology
+
+Templates use a few precise terms — they overlap in casual speech but mean different things in code:
+
+| Term | Meaning |
+|------|---------|
+| **Shape** | A composable primitive kind (`procedure`, `checklist`, `log`, …). |
+| **Node** | One entry in the template structure tree (has `id`, `kind`, `title`). |
+| **Occurrence** | A node at a specific **repeat stack** — e.g. application **#4** of 10. The walker expands repeats into occurrences. |
+| **Instance** | A persisted runtime row (`ShapeState`) tracking status for a trackable occurrence (checklist, action, procedure). Log and artifact nodes do not get instances. |
+| **Item** | A child node inside a checklist — the thing behind each checkbox. The fourth row in a checklist is the fourth **item** (identified by its node `id` in `item_completion`). |
+| **Record** | A row in the log table (`template_records`) — operational data, separate from shape instance state. |
+
+**Example:** In a repeated job-application checklist, *“Tailor resume for this role”* is an **item** (structure node). When you are on application #4, you are looking at one **occurrence** of that checklist. Checking the box updates the checklist **instance** for that occurrence. Saving company/position updates a **record** in the log.
+
+---
+
+## Dependencies
+
+Shapes can declare `depends_on` edges. The engine evaluates them at runtime and **hard-blocks** forward progress (checking items, marking complete) until satisfied.
+
+### Supported requirements
+
+| Requirement | Meaning |
+|-------------|---------|
+| `completed` | Target shape instance is done. |
+| `started` | Target has been started or finished. |
+| `has_record` | Log row(s) exist — see scopes below. |
+| `has_artifact` | At least one artifact is attached to the note. |
+
+`failed` is a terminal **instance status** (like `complete`). If a step failed, a `completed` dependency on it stays unsatisfied — a separate `not_failed` requirement is unnecessary.
+
+#### Why no `approved` requirement?
+
+Approval can be modeled today with a checklist item or action (“Manager signed off”) and a normal `completed` dependency. A dedicated `approved` requirement would only matter for **external attestation** — e.g. a second user, timestamped sign-off, or integration callback stored outside shape state. None of that exists yet; if it does later, either add an approval field on `ShapeState` or reintroduce the requirement deliberately.
+
+### `has_record` scopes
+
+Log data and checklist state are separate. `has_record` ties workflow progress to **evidence in the log**.
+
+| Scope | Use when |
+|-------|----------|
+| `same_repeat_context` (default) | **This iteration** must have a log row — e.g. application #4 cannot be confirmed until application #4 is logged. |
+| `all_occurrences` | **Every iteration** must have a log row — e.g. wrap-up blocked until all 10 applications have a record when `target_count: 10`. |
+
+Example (per-iteration gate):
+
+```yaml
+- id: confirm-logged
+  kind: action
+  title: Confirm application record is complete
+  depends_on:
+    - target: application-log
+      requirement: has_record
+      scope: same_repeat_context
+```
+
+Example (all iterations before wrap-up):
+
+```yaml
+- id: wrapup
+  kind: procedure
+  depends_on:
+    - target: application-log
+      requirement: has_record
+      scope: all_occurrences
+```
+
+Records are stored with the repeat stack of the iteration you were in when you added them (e.g. `[{"shape_id":"applications","index":4}]`), so scoped checks align with how the TUI filters the log panel.
+
+---
+
 ## Legacy overview (flat model)
 
 The original three-tab model maps to shapes as follows:

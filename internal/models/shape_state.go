@@ -9,6 +9,8 @@ const (
 	StatusNotStarted InstanceStatus = "not_started"
 	StatusInProgress InstanceStatus = "in_progress"
 	StatusComplete   InstanceStatus = "complete"
+	StatusSkipped    InstanceStatus = "skipped"
+	StatusFailed     InstanceStatus = "failed"
 )
 
 // ShapeStateData holds per-shape runtime payload stored as JSON.
