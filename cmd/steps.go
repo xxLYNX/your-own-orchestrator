@@ -26,7 +26,7 @@ func loadProcedureState(db *database.DB, noteID int64, stepNumber int) (*databas
 	if err != nil {
 		return nil, nil, err
 	}
-	states, err := database.ListTopLevelProcedureStates(db.Conn(), ctx.NoteTemplate.ID)
+	states, err := database.ListTopLevelStages(db.Conn(), ctx.NoteTemplate.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -42,45 +42,38 @@ var stepListCmd = &cobra.Command{
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runForTemplatedNoteArg(args, func(db *database.DB, ctx *database.TemplatedNoteContext) error {
-			states, err := database.ListTopLevelProcedureStates(db.Conn(), ctx.NoteTemplate.ID)
+			states, err := database.ListTopLevelStages(db.Conn(), ctx.NoteTemplate.ID)
 			if err != nil {
 				return fmt.Errorf("failed to list procedure states: %w", err)
 			}
 			if len(states) == 0 {
-				fmt.Printf("No procedure states found for note: %s\n", ctx.Note.Title)
+				fmt.Printf("No stages found for note: %s\n", ctx.Note.Title)
 				return nil
 			}
 
-			fmt.Printf("Procedures for: %s\n\n", ctx.Note.Title)
+			fmt.Printf("Stages for: %s\n\n", ctx.Note.Title)
 			runtime, err := database.LoadShapeRuntime(db.Conn(), ctx.NoteTemplate.ID, ctx.Template, ctx.NoteTemplate.TemplateData.Inputs)
 			if err != nil {
 				return fmt.Errorf("failed to load shape runtime: %w", err)
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
-			_, _ = fmt.Fprintln(w, "STATUS\tSTEP\tTITLE\tCOMPLETED")
-			_, _ = fmt.Fprintln(w, "------\t----\t-----\t---------")
+			_, _ = fmt.Fprintln(w, "MARK\tSTEP\tTITLE\tSTATE")
+			_, _ = fmt.Fprintln(w, "----\t----\t-----\t-----")
 
 			done := 0
 			for i, state := range states {
-				status := "○"
-				if runtime.IsBlocked(state) {
-					status = "🔒"
-				} else if state.Completed {
-					status = "✓"
+				blocked := runtime.IsBlocked(state)
+				mark := models.InstanceStatusMarker(state, blocked)
+				label := models.InstanceStatusLabel(state, blocked)
+				if state.Completed || state.Status == models.StatusSkipped {
 					done++
 				}
-				completedAt := ""
-				if state.Completed {
-					if state.CompletedAt != nil {
-						completedAt = *state.CompletedAt
-					}
-				}
 				title := strutil.Truncate(state.Title, 60)
-				_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", status, i+1, title, completedAt)
+				_, _ = fmt.Fprintf(w, "%s\t%d\t%s\t%s\n", mark, i+1, title, label)
 			}
 			_ = w.Flush()
-			fmt.Printf("\nProgress: %d/%d complete\n", done, len(states))
+			fmt.Printf("\nProgress: %d/%d done (complete or skipped)\n", done, len(states))
 			return nil
 		})
 	},
@@ -120,6 +113,57 @@ var stepUncompleteCmd = &cobra.Command{
 	},
 }
 
+var stepResetCmd = &cobra.Command{
+	Use:   "reset <note-id> <step-number>",
+	Short: "Reset a procedure state to open",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		noteID, err := parseNoteIDArg(args[0])
+		if err != nil {
+			return err
+		}
+		stepNumber, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid step number: %w", err)
+		}
+		return setStepTerminalStatus(noteID, stepNumber, models.StatusNotStarted)
+	},
+}
+
+var stepSkipCmd = &cobra.Command{
+	Use:   "skip <note-id> <step-number>",
+	Short: "Mark a procedure state skipped",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		noteID, err := parseNoteIDArg(args[0])
+		if err != nil {
+			return err
+		}
+		stepNumber, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid step number: %w", err)
+		}
+		return setStepTerminalStatus(noteID, stepNumber, models.StatusSkipped)
+	},
+}
+
+var stepFailCmd = &cobra.Command{
+	Use:   "fail <note-id> <step-number>",
+	Short: "Mark a procedure state failed",
+	Args:  cobra.ExactArgs(2),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		noteID, err := parseNoteIDArg(args[0])
+		if err != nil {
+			return err
+		}
+		stepNumber, err := strconv.Atoi(args[1])
+		if err != nil {
+			return fmt.Errorf("invalid step number: %w", err)
+		}
+		return setStepTerminalStatus(noteID, stepNumber, models.StatusFailed)
+	},
+}
+
 var stepNoteCmd = &cobra.Command{
 	Use:   "note <note-id> <step-number> <text>",
 	Short: "Add notes to a procedure state",
@@ -154,5 +198,8 @@ func init() {
 	stepsCmd.AddCommand(stepListCmd)
 	stepsCmd.AddCommand(stepCompleteCmd)
 	stepsCmd.AddCommand(stepUncompleteCmd)
+	stepsCmd.AddCommand(stepSkipCmd)
+	stepsCmd.AddCommand(stepFailCmd)
+	stepsCmd.AddCommand(stepResetCmd)
 	stepsCmd.AddCommand(stepNoteCmd)
 }

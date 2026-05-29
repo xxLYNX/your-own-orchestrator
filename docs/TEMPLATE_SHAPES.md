@@ -101,6 +101,17 @@ Example (all iterations before wrap-up):
 
 Records are stored with the repeat stack of the iteration you were in when you added them (e.g. `[{"shape_id":"applications","index":4}]`), so scoped checks align with how the TUI filters the log panel.
 
+### Skip and fail
+
+Stages can be marked **skipped** (⊘) or **failed** (✗) when they do not apply or did not work out:
+
+| Interface | Command / key |
+|-----------|----------------|
+| CLI | `yoo step skip <note-id> <n>` · `yoo step fail <note-id> <n>` · `yoo step reset <note-id> <n>` |
+| TUI | `x` skip · `!` fail · `u` reset (checklist focus or steps panel) |
+
+Skipped stages count toward progress; failed stages do not. Both bypass dependency blockers (explicit choice).
+
 ---
 
 ## Legacy overview (flat model)

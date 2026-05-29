@@ -1,0 +1,43 @@
+name: "Home Task"
+version: "1.0.0"
+description: "Fix or do one thing around the house — three simple stages"
+category: "personal"
+
+structure:
+  id: root
+  kind: procedure
+  title: Home task
+  dependency_mode: manual
+  steps:
+    - id: prep
+      kind: checklist
+      title: Get ready
+      items:
+        - kind: checklist
+          title: Gather tools and materials
+        - kind: checklist
+          title: Clear the work area
+    - id: do-it
+      kind: checklist
+      title: Do the work
+      items:
+        - kind: checklist
+          title: Complete the main task
+        - kind: checklist
+          title: Test that it works
+    - id: finish
+      kind: checklist
+      title: Wrap up
+      items:
+        - kind: checklist
+          title: Clean up
+        - kind: checklist
+          title: Put tools away
+
+metadata:
+  tags: ["personal", "home", "simple"]
+  estimated_duration: "1 hour"
+  difficulty: easy
+
+notes: |
+  Three short checklists. Drill into each stage from the note view (press l/enter).

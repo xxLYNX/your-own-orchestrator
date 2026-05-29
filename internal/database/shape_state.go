@@ -217,14 +217,29 @@ func ListAllShapeStates(db *sql.DB, noteTemplateID int64) ([]*models.ShapeState,
 
 // ListTopLevelProcedureStates returns top-level procedure rows for the steps panel.
 func ListTopLevelProcedureStates(db *sql.DB, noteTemplateID int64) ([]*models.ShapeState, error) {
+	return listTopLevelShapeStates(db, noteTemplateID, models.ShapeProcedure)
+}
+
+// ListTopLevelStages returns top-level trackable shape states (one level under root).
+func ListTopLevelStages(db *sql.DB, noteTemplateID int64) ([]*models.ShapeState, error) {
+	return listTopLevelShapeStates(db, noteTemplateID, "")
+}
+
+func listTopLevelShapeStates(db *sql.DB, noteTemplateID int64, kind string) ([]*models.ShapeState, error) {
 	query := `
 		SELECT` + shapeStateSelectColumns + `
 		FROM note_shape_state
-		WHERE note_template_id = ? AND repeat_stack_json = '[]' AND kind = ?
-		  AND shape_path NOT LIKE '%.apply_one.%' AND shape_path NOT LIKE '%.apply_one'
-		ORDER BY id ASC
+		WHERE note_template_id = ? AND repeat_stack_json = '[]'
+		  AND shape_path GLOB 'root.*'
+		  AND shape_path NOT GLOB 'root.*.*'
 	`
-	rows, err := db.Query(query, noteTemplateID, models.ShapeProcedure)
+	args := []interface{}{noteTemplateID}
+	if kind != "" {
+		query += ` AND kind = ?`
+		args = append(args, kind)
+	}
+	query += ` ORDER BY id ASC`
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +276,7 @@ func UpdateShapeState(db *sql.DB, state *models.ShapeState) error {
 	var completedAt interface{}
 	if state.Completed {
 		completedAt = now
-		if state.Status == "" || state.Status == models.StatusNotStarted {
+		if state.Status == "" || state.Status == models.StatusNotStarted || state.Status == models.StatusInProgress {
 			state.Status = models.StatusComplete
 		}
 	}
@@ -341,6 +356,36 @@ func ToggleShapeComplete(db *sql.DB, runtime *ShapeRuntime, state *models.ShapeS
 		state.Status = models.StatusComplete
 	} else {
 		state.Status = models.StatusInProgress
+	}
+	if err := UpdateShapeState(db, state); err != nil {
+		return err
+	}
+	if runtime != nil {
+		return runtime.Refresh(db)
+	}
+	return nil
+}
+
+// SetShapeTerminalStatus marks an instance skipped, failed, or reset to not started.
+// Skip and fail bypass dependency blockers (explicit user decision).
+func SetShapeTerminalStatus(db *sql.DB, runtime *ShapeRuntime, state *models.ShapeState, status models.InstanceStatus) error {
+	if state == nil {
+		return fmt.Errorf("shape state is nil")
+	}
+	switch status {
+	case models.StatusSkipped, models.StatusFailed:
+		state.Completed = false
+		state.Status = status
+	case models.StatusNotStarted:
+		state.Completed = false
+		state.Status = models.StatusNotStarted
+		if state.Kind == models.ShapeChecklist && state.Data.ItemCompletion != nil {
+			for id := range state.Data.ItemCompletion {
+				state.Data.ItemCompletion[id] = false
+			}
+		}
+	default:
+		return fmt.Errorf("unsupported terminal status %q", status)
 	}
 	if err := UpdateShapeState(db, state); err != nil {
 		return err

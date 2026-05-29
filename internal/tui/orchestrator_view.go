@@ -249,6 +249,33 @@ func (m *OrchestratorModel) handleInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+	case "x":
+		if m.stepsModel != nil && m.focusChecklist {
+			if err := m.stepsModel.SetCursorTerminalStatus(models.StatusSkipped); err != nil {
+				m.err = err
+			} else if err := m.persistProgress(); err != nil {
+				m.err = err
+			}
+			return m, nil
+		}
+	case "!":
+		if m.stepsModel != nil && m.focusChecklist {
+			if err := m.stepsModel.SetCursorTerminalStatus(models.StatusFailed); err != nil {
+				m.err = err
+			} else if err := m.persistProgress(); err != nil {
+				m.err = err
+			}
+			return m, nil
+		}
+	case "u":
+		if m.stepsModel != nil && m.focusChecklist {
+			if err := m.stepsModel.SetCursorTerminalStatus(models.StatusNotStarted); err != nil {
+				m.err = err
+			} else if err := m.persistProgress(); err != nil {
+				m.err = err
+			}
+			return m, nil
+		}
 	case "up", "k":
 		if m.focusChecklist && m.stepsModel != nil && m.stepsModel.HasChecklist() {
 			m.stepsModel.MoveCursor(-1)
@@ -579,7 +606,7 @@ func (m *OrchestratorModel) renderPanelView() string {
 }
 
 func (m *OrchestratorModel) renderFooter() string {
-	parts := []string{"jk: navigate", "space: toggle", "h/l: out/in", "tab: tree/checklist", "esc: exit"}
+	parts := []string{"jk: navigate", "space: toggle", "x/!/u: skip/fail/reset", "h/l: out/in", "tab: tree/checklist", "esc: exit"}
 	if m.recordsModel != nil {
 		parts = append(parts, "r: log")
 	}

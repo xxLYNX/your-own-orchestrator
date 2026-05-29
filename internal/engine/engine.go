@@ -36,7 +36,7 @@ func EvaluateProgress(root *models.ShapeNode, states []*models.ShapeState, input
 			}
 		case models.ShapeAction, models.ShapeProcedure:
 			progress.Total++
-			if state.Completed {
+			if state.Completed || state.Status == models.StatusSkipped {
 				progress.Done++
 			}
 		}

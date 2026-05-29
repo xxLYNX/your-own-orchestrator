@@ -9,21 +9,23 @@ import (
 	"yoo/internal/database"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // ScheduleModel is the Bubble Tea model for the schedule view.
 type ScheduleModel struct {
-	db         *sql.DB
-	notes      []*database.Note
-	cursor     int
-	date       time.Time
-	width      int
-	height     int
-	detail     *OrchestratorModel
-	err        error
-	quitting   bool
-	addingNote bool
-	noteInput  string
+	db          *sql.DB
+	notes       []*database.Note
+	cursor      int
+	date        time.Time
+	dayProgress float64
+	width       int
+	height      int
+	detail      *OrchestratorModel
+	err         error
+	quitting    bool
+	addingNote  bool
+	noteInput   string
 }
 
 // NewScheduleModel creates a new schedule model.
@@ -40,9 +42,14 @@ func NewScheduleModel(db *sql.DB, date time.Time, notes []*database.Note) Schedu
 
 // ShowSchedule launches the Bubble Tea TUI to display the schedule.
 func ShowSchedule(db *sql.DB, notes []*database.Note, date time.Time) error {
+	dayProgress, err := database.RefreshScheduleNotes(db, notes)
+	if err != nil {
+		return err
+	}
 	model := NewScheduleModel(db, date, notes)
+	model.dayProgress = dayProgress
 	p := tea.NewProgram(model, tea.WithAltScreen())
-	_, err := p.Run()
+	_, err = p.Run()
 	return err
 }
 
@@ -107,6 +114,13 @@ func (m ScheduleModel) reloadNotes() (ScheduleModel, tea.Cmd) {
 			m.cursor = len(m.notes) - 1
 		}
 	}
+
+	dayProgress, err := database.RefreshScheduleNotes(m.db, m.notes)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.dayProgress = dayProgress
 
 	return m, nil
 }
@@ -192,7 +206,15 @@ func (m ScheduleModel) toggleNoteCompletion() (ScheduleModel, tea.Cmd) {
 
 	if err := database.UpdateNote(m.db, note); err != nil {
 		m.err = err
+		return m, nil
 	}
+
+	dayProgress, err := database.RefreshScheduleNotes(m.db, m.notes)
+	if err != nil {
+		m.err = err
+		return m, nil
+	}
+	m.dayProgress = dayProgress
 
 	return m, nil
 }
@@ -264,6 +286,11 @@ func (m ScheduleModel) renderScheduleView() string {
 	s.WriteString(TitleWithBorderStyle.Render(fmt.Sprintf("📅 Schedule for %s", dateStr)))
 	s.WriteString("\n\n")
 
+	if len(m.notes) > 0 {
+		s.WriteString(m.renderDayProgress())
+		s.WriteString("\n\n")
+	}
+
 	if len(m.notes) == 0 {
 		s.WriteString(EmptyState("No notes for this day. Press 'a' to add one."))
 		s.WriteString("\n\n")
@@ -278,6 +305,36 @@ func (m ScheduleModel) renderScheduleView() string {
 	helpText := "↑/k ↓/j: navigate • enter: open/toggle • space: toggle • a: add • d: delete • q: quit"
 	s.WriteString(HelpWithBorderStyle.Render(helpText))
 
+	return s.String()
+}
+
+func (m ScheduleModel) renderDayProgress() string {
+	pct := int(m.dayProgress * 100)
+	if pct > 100 {
+		pct = 100
+	}
+	if pct < 0 {
+		pct = 0
+	}
+
+	barWidth := m.width - 24
+	if barWidth < 20 {
+		barWidth = 20
+	}
+	if barWidth > 50 {
+		barWidth = 50
+	}
+
+	var s strings.Builder
+	s.WriteString(ProgressTextStyle.Render("Today"))
+	s.WriteString(" ")
+	s.WriteString(ProgressBar(pct, 100, barWidth))
+	s.WriteString(" ")
+	s.WriteString(ProgressPercentStyle.Render(fmt.Sprintf("%d%%", pct)))
+	s.WriteString("\n")
+	s.WriteString(lipgloss.NewStyle().Foreground(ColorSubtle).Render(
+		fmt.Sprintf("%d notes · each counts equally", len(m.notes)),
+	))
 	return s.String()
 }
 

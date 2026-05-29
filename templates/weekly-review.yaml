@@ -1,0 +1,32 @@
+name: "Weekly Review"
+version: "1.0.0"
+description: "A short end-of-week reset — four prompts, no fluff"
+category: "personal"
+
+structure:
+  id: root
+  kind: procedure
+  title: Weekly review
+  dependency_mode: manual
+  steps:
+    - id: review
+      kind: checklist
+      title: This week
+      description: Work through these in order, or skip what does not apply
+      items:
+        - kind: checklist
+          title: Clear inbox and loose ends
+        - kind: checklist
+          title: Review calendar for next week
+        - kind: checklist
+          title: Pick top 3 priorities for next week
+        - kind: checklist
+          title: Note anything overdue or stuck
+
+metadata:
+  tags: ["personal", "planning", "simple"]
+  estimated_duration: "20 minutes"
+  difficulty: easy
+
+notes: |
+  Press x on a stage to skip it if it does not apply this week.

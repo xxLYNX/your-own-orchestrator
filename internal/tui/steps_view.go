@@ -146,6 +146,35 @@ func (m *StepsViewModel) isStateBlocked(state *models.ShapeState) bool {
 	return m.runtime.IsBlocked(state)
 }
 
+func (m *StepsViewModel) cursorShapeState() *models.ShapeState {
+	if m.useShapeState {
+		return m.shapeState
+	}
+	if m.cursor >= 0 && m.cursor < len(m.steps) {
+		return m.steps[m.cursor]
+	}
+	return nil
+}
+
+// SetCursorTerminalStatus marks the selected stage skipped, failed, or open.
+func (m *StepsViewModel) SetCursorTerminalStatus(status models.InstanceStatus) error {
+	return m.setCursorTerminalStatus(status)
+}
+
+func (m *StepsViewModel) setCursorTerminalStatus(status models.InstanceStatus) error {
+	state := m.cursorShapeState()
+	if state == nil {
+		return nil
+	}
+	if err := database.SetShapeTerminalStatus(m.db, m.runtime, state, status); err != nil {
+		return err
+	}
+	if m.useShapeState {
+		m.checklistItems = models.ChecklistItemsFromState(m.checklistNode, m.shapeState)
+	}
+	return m.refreshRuntime()
+}
+
 // SetEmbedded configures compact rendering for use inside the templated note view.
 func (m *StepsViewModel) SetEmbedded(v bool) {
 	m.embedded = v
@@ -214,6 +243,21 @@ func (m StepsViewModel) handleNormalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.toggleRow(m.cursor); err != nil {
 				m.err = err
 			}
+		}
+
+	case "x":
+		if err := m.setCursorTerminalStatus(models.StatusSkipped); err != nil {
+			m.err = err
+		}
+
+	case "!":
+		if err := m.setCursorTerminalStatus(models.StatusFailed); err != nil {
+			m.err = err
+		}
+
+	case "u":
+		if err := m.setCursorTerminalStatus(models.StatusNotStarted); err != nil {
+			m.err = err
 		}
 
 	case "n":
@@ -291,6 +335,13 @@ func (m *StepsViewModel) rowCount() int {
 }
 
 func (m *StepsViewModel) toggleRow(index int) error {
+	state := m.cursorShapeState()
+	if state != nil && (state.Status == models.StatusSkipped || state.Status == models.StatusFailed) {
+		if err := m.setCursorTerminalStatus(models.StatusNotStarted); err != nil {
+			return err
+		}
+		state = m.cursorShapeState()
+	}
 	if m.useShapeState {
 		if index < 0 || index >= len(m.checklistItems) {
 			return nil
@@ -466,7 +517,12 @@ func (m StepsViewModel) renderStepsList() string {
 			}
 
 			checkbox := Checkbox(item.Completed)
-			if !item.Completed && m.isStateBlocked(m.shapeState) {
+			switch {
+			case m.shapeState.Status == models.StatusSkipped:
+				checkbox = lipgloss.NewStyle().Foreground(ColorMuted).Render("⊘")
+			case m.shapeState.Status == models.StatusFailed:
+				checkbox = lipgloss.NewStyle().Foreground(ColorError).Render("✗")
+			case !item.Completed && m.isStateBlocked(m.shapeState):
 				checkbox = lipgloss.NewStyle().Foreground(ColorWarning).Render("🔒")
 			}
 
@@ -513,7 +569,12 @@ func (m StepsViewModel) renderStepsList() string {
 		}
 
 		checkbox := Checkbox(state.Completed)
-		if !state.Completed && m.isStateBlocked(state) {
+		switch {
+		case state.Status == models.StatusSkipped:
+			checkbox = lipgloss.NewStyle().Foreground(ColorMuted).Render("⊘")
+		case state.Status == models.StatusFailed:
+			checkbox = lipgloss.NewStyle().Foreground(ColorError).Render("✗")
+		case !state.Completed && m.isStateBlocked(state):
 			checkbox = lipgloss.NewStyle().Foreground(ColorWarning).Render("🔒")
 		}
 
@@ -799,6 +860,9 @@ func (m StepsViewModel) renderHelp() string {
 			"↑/k", "up",
 			"↓/j", "down",
 			"space/enter", "toggle",
+			"x", "skip",
+			"!", "fail",
+			"u", "reset",
 			"n", "add note",
 			"v", "details",
 			"q/esc", "quit",

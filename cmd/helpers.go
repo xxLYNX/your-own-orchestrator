@@ -5,6 +5,7 @@ import (
 	"strconv"
 
 	"yoo/internal/database"
+	"yoo/internal/models"
 )
 
 func parseNoteIDArg(arg string) (int64, error) {
@@ -78,4 +79,27 @@ func completionLabel(completed bool) string {
 		return "complete"
 	}
 	return "incomplete"
+}
+
+func setStepTerminalStatus(noteID int64, stepNumber int, status models.InstanceStatus) error {
+	return runForTemplatedNote(noteID, func(db *database.DB, ctx *database.TemplatedNoteContext) error {
+		_, state, err := loadProcedureState(db, noteID, stepNumber)
+		if err != nil {
+			return err
+		}
+		runtime, err := database.LoadShapeRuntime(db.Conn(), ctx.NoteTemplate.ID, ctx.Template, ctx.NoteTemplate.TemplateData.Inputs)
+		if err != nil {
+			return err
+		}
+		if status == models.StatusNotStarted && state.Status == models.StatusNotStarted && !state.Completed {
+			fmt.Printf("Step %d is already open\n", stepNumber)
+			return nil
+		}
+		if err := database.SetShapeTerminalStatus(db.Conn(), runtime, state, status); err != nil {
+			return err
+		}
+		label := models.InstanceStatusLabel(state, runtime.IsBlocked(state))
+		fmt.Printf("%s Step %d marked %s: %s\n  Note: %s\n", models.InstanceStatusMarker(state, false), stepNumber, label, state.Title, ctx.Note.Title)
+		return nil
+	})
 }

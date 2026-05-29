@@ -1,0 +1,31 @@
+name: "Grocery Run"
+version: "1.0.0"
+description: "A quick shopping list — check things off as you go"
+category: "personal"
+
+structure:
+  id: root
+  kind: procedure
+  title: Grocery run
+  dependency_mode: manual
+  steps:
+    - id: shopping
+      kind: checklist
+      title: Pick up
+      items:
+        - kind: checklist
+          title: Milk
+        - kind: checklist
+          title: Eggs
+        - kind: checklist
+          title: Bread
+        - kind: checklist
+          title: Coffee
+
+metadata:
+  tags: ["personal", "errands", "simple"]
+  estimated_duration: "30 minutes"
+  difficulty: easy
+
+notes: |
+  One checklist, no extra steps. Open the note, tab to the list, space to check items off.
